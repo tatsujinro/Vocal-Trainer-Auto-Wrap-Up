@@ -2,7 +2,7 @@ import urllib.request
 import os
 import ssl
 
-print("🚀 正在開始打包您的離線版聲樂教練 (v22.1 安全打包版)...")
+print("🚀 正在開始打包您的離線版聲樂教練 (v24 高傳真音質版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -17,36 +17,32 @@ try:
     with urllib.request.urlopen(PLAYER_URL, context=ssl_context) as response:
         player_code = response.read().decode('utf-8')
     
-    print("📥 下載鋼琴音色庫 (這可能需要幾秒鐘)...")
+    print("📥 下載鋼琴音色庫...")
     with urllib.request.urlopen(PIANO_URL, context=ssl_context) as response:
         piano_code = response.read().decode('utf-8')
         
     if len(piano_code) < 50000:
         print("⚠️ 警告：音色庫檔案過小，可能下載不完整。")
-    else:
-        print("✅ 音色庫下載完成！")
         
 except Exception as e:
     print(f"❌ 下載失敗: {e}")
     exit()
 
-# 4. HTML 模板 (使用純字串，避免 f-string 解析錯誤)
-# 注意：這裡沒有 f 前綴，且使用佔位符 __INJECT_RESOURCES__
+# 4. HTML 模板
 html_template = """<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>吉他手聲樂教練 v22.1</title>
+    <title>Daily Vocal Workout</title>
     <style>
-        :root { --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #00e676; --accent-dark: #00a854; --accent-light: #69f0ae; --pitch-target: #2979ff; --pitch-user: #ffea00; }
+        :root { --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #ffab00; --accent-dark: #c67c00; --accent-light: #ffdd4b; --pitch-target: #2979ff; --pitch-user: #ffea00; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; text-align: center; user-select: none; padding-bottom: 120px; }
         h1 { color: var(--accent); margin-bottom: 5px; font-size: 1.5rem; }
         p { color: #888; margin-top: 0; font-size: 0.9rem; }
         
         .control-panel { background: var(--card-bg); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 1px solid #333; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
         
-        /* 音準儀顯示區 */
         .pitch-monitor {
             background: #000; border: 2px solid #333; border-radius: 12px; height: 120px; 
             margin-bottom: 15px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
@@ -107,7 +103,7 @@ html_template = """<!DOCTYPE html>
         .play-btn { 
             background: var(--accent); color: #000; border: none; padding: 18px 40px; border-radius: 50px; 
             font-size: 1.2rem; font-weight: 800; width: 100%; letter-spacing: 1px;
-            box-shadow: 0 0 20px rgba(0, 230, 118, 0.4); transition: transform 0.1s;
+            box-shadow: 0 0 20px rgba(255, 171, 0, 0.4); transition: transform 0.1s;
             position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 100;
         }
         .play-btn:active { transform: translateX(-50%) scale(0.96); }
@@ -121,19 +117,27 @@ html_template = """<!DOCTYPE html>
         input[type="range"]::-webkit-slider-runnable-track { width: 100%; height: 6px; background: #444; border-radius: 5px; }
         
         .loading-mask { position: fixed; top:0; left:0; width:100%; height:100%; background: #121212; z-index: 999; display: flex; justify-content: center; align-items: center; color: white; flex-direction: column; }
+        
+        .headphone-warning {
+            background: #222; border: 1px solid #ffab00; color: #ffab00; padding: 10px; font-size: 0.8rem; margin-bottom: 15px; border-radius: 8px; text-align: center;
+        }
     </style>
 </head>
 <body>
 
     <div id="loadingMask" class="loading-mask">
-        <div style="font-size: 2rem; margin-bottom: 10px;">🎤</div>
-        <div>v22.1 系統初始化...</div>
-        <div style="font-size: 0.8rem; color: #888; margin-top:5px;">請確保使用 HTTPS (GitHub Pages) 開啟</div>
+        <div style="font-size: 2rem; margin-bottom: 10px;">🎧</div>
+        <div>v24 高傳真音質版...</div>
+        <div style="font-size: 0.8rem; color: #888; margin-top:5px;">請務必佩戴耳機以防回授</div>
         <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem; padding:20px;"></div>
     </div>
 
     <h1>聲樂教練 Pro</h1>
-    <p>錄音 & 音準評分版</p>
+    <p>Hi-Fi 錄音版 (請戴耳機)</p>
+
+    <div class="headphone-warning">
+        ⚠️ <b>注意：</b>此版本已關閉降噪功能以提升音質。<br>請務必<b>佩戴耳機</b>，否則會有刺耳嘯叫聲！
+    </div>
 
     <div class="pitch-monitor" id="pitchMonitor">
         <div class="judge-text" id="judgeText">等待開始...</div>
@@ -436,7 +440,21 @@ html_template = """<!DOCTYPE html>
 
     async function startRecording() {
         try {
-            microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // --- v24 關鍵修正：停用麥克風降噪與回音消除 ---
+            const constraints = {
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false,
+                    // 某些瀏覽器可能需要這些額外設定
+                    googEchoCancellation: false,
+                    googAutoGainControl: false,
+                    googNoiseSuppression: false,
+                    googHighpassFilter: false
+                }
+            };
+            
+            microphoneStream = await navigator.mediaDevices.getUserMedia(constraints);
             mediaRecorder = new MediaRecorder(microphoneStream);
             audioChunks = [];
             
@@ -524,6 +542,8 @@ html_template = """<!DOCTYPE html>
         if (audioCtx.state === 'suspended') await audioCtx.resume();
         
         updateGains();
+        
+        // 啟動錄音 (含降噪關閉)
         await startRecording();
 
         isPlaying = true;
@@ -694,9 +714,9 @@ html_template = """<!DOCTYPE html>
 final_html = html_template.replace("/*__INJECT_RESOURCES__*/", f"{player_code}\n{piano_code}")
 
 # 6. 寫入檔案
-output_filename = "VocalTrainer_Offline_v22_1.html"
+output_filename = "VocalTrainer_Offline_v24.html"
 with open(output_filename, "w", encoding="utf-8") as f:
     f.write(final_html)
 
 print(f"✅ 成功！已建立檔案: {output_filename}")
-print(f"👉 請上傳此檔案至 GitHub，Actions 這次一定會成功！")
+print(f"👉 請上傳此檔案。開啟後，請到 Mac 控制中心檢查麥克風模式是否為「標準」。")
