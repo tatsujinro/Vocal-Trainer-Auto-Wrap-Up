@@ -2,7 +2,7 @@ import urllib.request
 import os
 import ssl
 
-print("🚀 正在開始打包您的離線版聲樂教練 (v17 螢幕恆亮版)...")
+print("🚀 正在開始打包您的離線版聲樂教練 (v19 轉調導引版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -34,9 +34,9 @@ html_template = f"""<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Daily Vocal Workout</title>
+    <title>吉他手聲樂教練 v19</title>
     <style>
-        :root {{ --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #ff5252; --accent-light: #ff867f; }}
+        :root {{ --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #00e5ff; --accent-light: #6effff; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; text-align: center; user-select: none; }}
         h1 {{ color: var(--accent); margin-bottom: 5px; font-size: 1.5rem; }}
         p {{ color: #888; margin-top: 0; font-size: 0.9rem; }}
@@ -62,17 +62,22 @@ html_template = f"""<!DOCTYPE html>
             width: 100%; height: 6px; background: #444; border-radius: 5px;
         }}
 
-        .tabs {{ display: flex; gap: 8px; margin-bottom: 20px; background: #111; padding: 5px; border-radius: 12px; }}
-        .tab-btn {{ background: transparent; color: #666; padding: 12px; border: none; flex: 1; border-radius: 8px; cursor: pointer; transition: 0.2s; font-weight: 600; }}
-        .tab-btn.active {{ background: var(--card-bg); color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }}
+        /* v19: 按鈕區改為 flex-wrap 以容納 5 個按鈕 */
+        .tabs {{ display: flex; gap: 8px; margin-bottom: 20px; background: #111; padding: 10px; border-radius: 12px; flex-wrap: wrap; justify-content: center; }}
+        .tab-btn {{ 
+            background: transparent; color: #666; padding: 10px 15px; border: 1px solid #333; 
+            border-radius: 8px; cursor: pointer; transition: 0.2s; font-weight: 600; font-size: 0.9rem;
+            min-width: 80px; flex: 1 1 30%; /* 彈性寬度 */
+        }}
+        .tab-btn.active {{ background: var(--card-bg); color: var(--accent); border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }}
         
         .play-btn {{ 
-            background: var(--accent); color: white; border: none; padding: 18px 40px; border-radius: 50px; 
+            background: var(--accent); color: #000; border: none; padding: 18px 40px; border-radius: 50px; 
             font-size: 1.2rem; font-weight: 800; margin-top: 10px; width: 100%; letter-spacing: 1px;
-            box-shadow: 0 0 20px rgba(255, 82, 82, 0.4); transition: transform 0.1s;
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.4); transition: transform 0.1s;
         }}
         .play-btn:active {{ transform: scale(0.96); }}
-        .play-btn.stop {{ background: #536dfe; color: white; box-shadow: none; }}
+        .play-btn.stop {{ background: #ff5252; color: white; box-shadow: none; }}
         .play-btn.warming {{ background: #333; color: #888; pointer-events: none; }}
 
         .status-display {{ margin-top: 10px; height: 100px; display: flex; flex-direction: column; justify-content: center; background: #000; border-radius: 12px; border: 1px solid #333; }}
@@ -90,31 +95,33 @@ html_template = f"""<!DOCTYPE html>
 
     <div id="loadingMask" class="loading-mask">
         <div style="font-size: 2rem; margin-bottom: 10px;">🎹</div>
-        <div>v17 系統初始化中...</div>
+        <div>v19 系統初始化中...</div>
         <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem; padding:20px;"></div>
     </div>
 
-    <h1>Daily Vocal Workout</h1>
-    <p></p>
+    <h1>聲樂教練 Pro</h1>
+    <p>轉調導引版</p>
 
     <div class="tabs">
-        <button id="btn-liptrill" class="tab-btn active" onclick="switchMode('liptrill')">大三和弦琶音</button>
-        <button id="btn-expansion" class="tab-btn" onclick="switchMode('expansion')">根音至五度音</button>
-        <button id="btn-jumps" class="tab-btn" onclick="switchMode('jumps')">八度音</button>
+        <button id="btn-triad" class="tab-btn active" onclick="switchMode('triad')">大三和弦<br>(1-3-5)</button>
+        <button id="btn-scale5" class="tab-btn" onclick="switchMode('scale5')">五度音階<br>(1-5-1)</button>
+        <button id="btn-octave" class="tab-btn" onclick="switchMode('octave')">八度音程<br>(1-8-1)</button>
+        <button id="btn-p5" class="tab-btn" onclick="switchMode('p5')">五度音程<br>(1-5-1)</button>
+        <button id="btn-p4" class="tab-btn" onclick="switchMode('p4')">四度音程<br>(1-4-1)</button>
     </div>
 
     <div class="control-panel">
         <div class="range-selectors">
             <div class="range-col">
-                <label>1. 起始根音</label>
+                <label>1. 起始 (低)</label>
                 <select id="startNote"></select>
             </div>
             <div class="range-col">
-                <label>2. 頂點根音</label>
+                <label>2. 頂點 (高)</label>
                 <select id="peakNote"></select>
             </div>
             <div class="range-col">
-                <label>3. 終點根音</label>
+                <label>3. 結束 (低)</label>
                 <select id="endNote"></select>
             </div>
         </div>
@@ -155,7 +162,7 @@ html_template = f"""<!DOCTYPE html>
     <div class="status-display">
         <div class="current-note" id="noteDisplay">Ready</div>
         <div class="action-text" id="actionDisplay">準備開始</div>
-        <div class="wake-status" id="wakeStatus">💡 省電模式待機中</div>
+        <div class="wake-status" id="wakeStatus"></div>
     </div>
 
     <button class="play-btn" id="playBtn" onclick="togglePlay()">▶ 開始練習</button>
@@ -166,10 +173,14 @@ html_template = f"""<!DOCTYPE html>
     </script>
 
     <script>
+    const SILENT_MP3 = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////wAAAP9MYXZj৫৮Ljc2LjEwMAAAAAAAAAAAAP/zBKAAAAAAABHgAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////wAAAP9MYXZj৫৮Ljc2LjEwMAAAAAAAAAAAAP/zBKAAAAAAABHgAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
     let audioCtx, player;
     let melodyGainNode, chordGainNode;
     let isPlaying = false;
-    
+    let silentAudioPlayer = new Audio(SILENT_MP3);
+    silentAudioPlayer.loop = true;
+
     let nextNoteTime = 0.0;
     let timerID;
     let lookahead = 25.0; 
@@ -178,12 +189,10 @@ html_template = f"""<!DOCTYPE html>
     let currentRoots = [];
     let rootIndex = 0;
     let patternStepIndex = 0;
-    let currentMode = 'liptrill';
+    // v19: 預設模式改為 triad
+    let currentMode = 'triad';
     let globalPeakIndex = 0;
-    
     let countInBeats = 4; 
-    
-    // v17: 喚醒鎖變數
     let wakeLock = null;
 
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -215,7 +224,7 @@ html_template = f"""<!DOCTYPE html>
                 endSel.add(new Option(val, val));
             }});
         }}
-        switchMode('liptrill');
+        switchMode('triad');
     }}
 
     function initUIListeners() {{
@@ -242,6 +251,7 @@ html_template = f"""<!DOCTYPE html>
         if(chordGainNode) chordGainNode.gain.setTargetAtTime(choVol / 100.0, audioCtx.currentTime, 0.05);
     }}
 
+    // v19: 模式切換邏輯
     function switchMode(mode) {{
         currentMode = mode;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -251,9 +261,15 @@ html_template = f"""<!DOCTYPE html>
         let p = document.getElementById('peakNote');
         let e = document.getElementById('endNote');
 
-        if(mode==='liptrill'){{ s.value='A3'; p.value='C#4'; e.value='A2'; }}
-        else if(mode==='expansion'){{ s.value='A3'; p.value='G4'; e.value='A2'; }}
-        else {{ s.value='C3'; p.value='G4'; e.value='C3'; }}
+        // 預設音域邏輯 (使用者可調)
+        s.value = 'A3'; 
+        e.value = 'A2';
+        
+        if (mode === 'triad') p.value = 'C#4'; // 1-3-5
+        else if (mode === 'scale5') p.value = 'G4'; // 1-2-3-4-5
+        else if (mode === 'octave') p.value = 'G4'; // 1-8-1
+        else if (mode === 'p5') p.value = 'G4'; // 1-5-1
+        else if (mode === 'p4') p.value = 'G4'; // 1-4-1
         
         generateRoots();
         if(isPlaying) {{
@@ -309,21 +325,21 @@ html_template = f"""<!DOCTYPE html>
         osc.stop(time + 0.1);
     }}
 
-    // --- v17: 螢幕喚醒鎖定邏輯 ---
+    function playChord(midiRoot, time, duration) {{
+        let preset = _tone_0000_JCLive_sf2_file;
+        [0, 4, 7].forEach(semi => {{
+            player.queueWaveTable(audioCtx, chordGainNode, preset, time, midiRoot + semi, duration, 0.5);
+        }});
+    }}
+
     async function requestWakeLock() {{
         try {{
             if ('wakeLock' in navigator) {{
                 wakeLock = await navigator.wakeLock.request('screen');
-                document.getElementById('wakeStatus').innerText = "☀️ 螢幕恆亮已開啟";
-                wakeLock.addEventListener('release', () => {{
-                    document.getElementById('wakeStatus').innerText = "💡 螢幕恆亮已釋放";
-                }});
-            }} else {{
-                document.getElementById('wakeStatus').innerText = "⚠️ 此瀏覽器不支援恆亮";
+                document.getElementById('wakeStatus').innerText = "💡 螢幕恆亮 | 🔊 媒體模式";
             }}
         }} catch (err) {{
             console.error(err);
-            document.getElementById('wakeStatus').innerText = "⚠️ 恆亮啟用失敗 (低電量模式?)";
         }}
     }}
 
@@ -331,14 +347,15 @@ html_template = f"""<!DOCTYPE html>
         if (wakeLock !== null) {{
             wakeLock.release();
             wakeLock = null;
+            document.getElementById('wakeStatus').innerText = "";
         }}
     }}
 
     async function togglePlay() {{
         if (isPlaying) {{ stop(); return; }}
 
-        // 1. 請求螢幕恆亮
         requestWakeLock();
+        try {{ await silentAudioPlayer.play(); }} catch(e) {{}}
 
         if (!audioCtx) {{
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -364,7 +381,6 @@ html_template = f"""<!DOCTYPE html>
         let beatDur = 60.0 / bpm;
         let now = audioCtx.currentTime;
         
-        let preset = _tone_0000_JCLive_sf2_file;
         let firstRootName = currentRoots[0];
         let firstRootMidi = getMidiPitch(firstRootName);
         let chordDur = beatDur * 4;
@@ -373,9 +389,7 @@ html_template = f"""<!DOCTYPE html>
             let t = now + (i * beatDur);
             playStickClick(t);
             if(i === 0) {{
-                [0, 4, 7].forEach(semi => {{
-                    player.queueWaveTable(audioCtx, chordGainNode, preset, t, firstRootMidi + semi, chordDur, 0.5);
-                }});
+                playChord(firstRootMidi, t, chordDur);
             }}
         }}
 
@@ -395,10 +409,9 @@ html_template = f"""<!DOCTYPE html>
 
     function stop() {{
         isPlaying = false;
-        
-        // 2. 釋放螢幕恆亮
         releaseWakeLock();
-        
+        silentAudioPlayer.pause();
+        silentAudioPlayer.currentTime = 0;
         clearTimeout(timerID);
         if(player && audioCtx) player.cancelQueue(audioCtx);
         
@@ -406,7 +419,6 @@ html_template = f"""<!DOCTYPE html>
         btn.innerHTML = "▶ 開始練習";
         btn.classList.remove('stop');
         btn.classList.remove('warming');
-        
         document.getElementById('noteDisplay').innerText = "Ready";
         document.getElementById('actionDisplay').innerText = "暫停中";
     }}
@@ -419,15 +431,22 @@ html_template = f"""<!DOCTYPE html>
         if (isPlaying) timerID = window.setTimeout(scheduler, lookahead);
     }}
 
+    // v19: 擴充模式步數邏輯
     function nextStep() {{
         let bpm = parseFloat(document.getElementById('bpm').value);
         let secondsPerBeat = 60.0 / bpm;
         nextNoteTime += secondsPerBeat;
 
-        let intervals, totalBeats;
-        if(currentMode==='liptrill') {{ intervals=[0,4,7,4,0]; totalBeats=6; }}
-        else if(currentMode==='expansion') {{ intervals=[0,2,4,5,7,5,4,2,0]; totalBeats=10; }}
-        else {{ intervals=[0,12,0]; totalBeats=4; }}
+        let intervals;
+        // 定義旋律音程 (最後會外加 2 拍吸氣)
+        if(currentMode === 'triad') intervals = [0, 4, 7, 4, 0];
+        else if(currentMode === 'scale5') intervals = [0, 2, 4, 5, 7, 5, 4, 2, 0];
+        else if(currentMode === 'octave') intervals = [0, 12, 0];
+        else if(currentMode === 'p5') intervals = [0, 7, 0];
+        else if(currentMode === 'p4') intervals = [0, 5, 0];
+        
+        // 總拍數 = 旋律拍數 + 2 拍吸氣
+        let totalBeats = intervals.length + 2; 
 
         patternStepIndex++;
         if (patternStepIndex >= totalBeats) {{
@@ -437,9 +456,23 @@ html_template = f"""<!DOCTYPE html>
         }}
     }}
 
+    // v19: 核心排程邏輯 (包含轉調導引)
     function scheduleNote(idx, step, time) {{
         let rootName = currentRoots[idx];
+        let bpm = parseFloat(document.getElementById('bpm').value);
+        let beatDur = 60.0 / bpm;
+        let rootMidi = getMidiPitch(rootName);
+        let preset = _tone_0000_JCLive_sf2_file;
 
+        // 定義間隔
+        let intervals;
+        if(currentMode === 'triad') intervals = [0, 4, 7, 4, 0];
+        else if(currentMode === 'scale5') intervals = [0, 2, 4, 5, 7, 5, 4, 2, 0];
+        else if(currentMode === 'octave') intervals = [0, 12, 0];
+        else if(currentMode === 'p5') intervals = [0, 7, 0];
+        else if(currentMode === 'p4') intervals = [0, 5, 0];
+
+        // 1. UI 更新
         if (step === 0) {{
             document.getElementById('noteDisplay').innerText = rootName;
             let dir = "";
@@ -448,32 +481,38 @@ html_template = f"""<!DOCTYPE html>
             else dir = "⬇ 下降";
             document.getElementById('actionDisplay').innerText = dir;
         }}
-        
-        let bpm = parseFloat(document.getElementById('bpm').value);
-        let beatDur = 60.0 / bpm;
-        let rootMidi = getMidiPitch(rootName);
-        let preset = _tone_0000_JCLive_sf2_file;
 
-        let intervals, totalBeats;
-        if(currentMode==='liptrill') {{ intervals=[0,4,7,4,0]; totalBeats=6; }}
-        else if(currentMode==='expansion') {{ intervals=[0,2,4,5,7,5,4,2,0]; totalBeats=10; }}
-        else {{ intervals=[0,12,0]; totalBeats=4; }}
-
-        if (step === totalBeats - 1) {{
-             document.getElementById('actionDisplay').innerText = "😤 吸氣";
-             return;
-        }}
-
+        // 2. 歌唱旋律部分 (Singing Phase)
         if (step < intervals.length) {{
             let noteMidi = rootMidi + intervals[step];
+            // 彈奏旋律
             player.queueWaveTable(audioCtx, melodyGainNode, preset, time, noteMidi, beatDur*0.9, 1.0);
+            
+            // 第一拍彈奏當前伴奏 (長度為旋律長度)
+            if (step === 0) {{
+                let chordDur = beatDur * intervals.length;
+                playChord(rootMidi, time, chordDur);
+            }}
+        }} 
+        
+        // 3. 吸氣與轉調導引 (Rest & Pivot Chord)
+        // 倒數第二拍 (吸氣 1)：再次確認當前和弦
+        else if (step === intervals.length) {{
+            document.getElementById('actionDisplay').innerText = "😤 吸氣 (1/2)";
+            playChord(rootMidi, time, beatDur);
         }}
-
-        if (step === 0) {{
-            let chordDur = beatDur * (totalBeats - 1);
-            [0, 4, 7].forEach(semi => {{
-                player.queueWaveTable(audioCtx, chordGainNode, preset, time, rootMidi + semi, chordDur, 0.5);
-            }});
+        // 最後一拍 (吸氣 2)：提前彈奏下一個和弦
+        else if (step === intervals.length + 1) {{
+             document.getElementById('actionDisplay').innerText = "👉 準備轉調";
+             
+             // 找出下一個根音
+             let nextIdx = idx + 1;
+             if (nextIdx >= currentRoots.length) nextIdx = 0; // 循環回頭
+             let nextRootName = currentRoots[nextIdx];
+             let nextRootMidi = getMidiPitch(nextRootName);
+             
+             // 彈奏下一個和弦 (導引)
+             playChord(nextRootMidi, time, beatDur);
         }}
     }}
     </script>
@@ -482,9 +521,9 @@ html_template = f"""<!DOCTYPE html>
 """
 
 # 5. 寫入檔案
-output_filename = "VocalTrainer_Offline_v17.html"
+output_filename = "VocalTrainer_Offline_v19.html"
 with open(output_filename, "w", encoding="utf-8") as f:
     f.write(html_template)
 
 print(f"✅ 成功！已建立檔案: {output_filename}")
-print(f"👉 v17 特性：加入螢幕喚醒鎖 (Wake Lock)，播放期間螢幕將保持恆亮，防止手機休眠斷線！")
+print(f"👉 v19 更新：新增五種練習模式，並加入「2拍吸氣 + 轉調和弦導引」功能！")
