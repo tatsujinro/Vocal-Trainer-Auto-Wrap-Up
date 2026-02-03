@@ -94,27 +94,27 @@ html_template = f"""<!DOCTYPE html>
         <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem; padding:20px;"></div>
     </div>
 
-    <h1>聲樂教練 Pro</h1>
-    <p>螢幕恆亮版</p>
+    <h1>Daily Vocal Workout</h1>
+    <p></p>
 
     <div class="tabs">
-        <button id="btn-liptrill" class="tab-btn active" onclick="switchMode('liptrill')">👄 唇顫音</button>
-        <button id="btn-expansion" class="tab-btn" onclick="switchMode('expansion')">📢 擴張</button>
-        <button id="btn-jumps" class="tab-btn" onclick="switchMode('jumps')">📈 大跳</button>
+        <button id="btn-liptrill" class="tab-btn active" onclick="switchMode('liptrill')">大三和弦琶音</button>
+        <button id="btn-expansion" class="tab-btn" onclick="switchMode('expansion')">根音至五度音</button>
+        <button id="btn-jumps" class="tab-btn" onclick="switchMode('jumps')">八度音</button>
     </div>
 
     <div class="control-panel">
         <div class="range-selectors">
             <div class="range-col">
-                <label>1. 起始 (低)</label>
+                <label>1. 起始根音</label>
                 <select id="startNote"></select>
             </div>
             <div class="range-col">
-                <label>2. 頂點 (高)</label>
+                <label>2. 頂點根音</label>
                 <select id="peakNote"></select>
             </div>
             <div class="range-col">
-                <label>3. 結束 (低)</label>
+                <label>3. 終點根音</label>
                 <select id="endNote"></select>
             </div>
         </div>
