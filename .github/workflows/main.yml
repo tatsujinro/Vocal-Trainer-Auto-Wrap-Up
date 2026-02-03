@@ -1,0 +1,47 @@
+name: 自動打包聲樂教練 HTML
+
+# 觸發條件：當 main 分支有代碼推送時
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: # 允許手動按按鈕觸發
+
+permissions:
+  contents: write # 允許機器人修改倉庫內容
+
+jobs:
+  build:
+    runs-on: ubuntu-latest # 使用 Ubuntu 虛擬機
+
+    steps:
+      # 1. 把倉庫的代碼抓下來
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. 安裝 Python 環境
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      # 3. 執行你的 Python 打包腳本
+      - name: Run Python Builder
+        run: |
+          # 這裡填寫你上傳的 Python 檔名，例如 build_offline_app.py
+          python build_offline_app.py
+
+      # 4. 把生成的檔案改名為 index.html (這樣 GitHub Pages 才能讀取)
+      # 注意：這裡假設生成的檔案是 VocalTrainer 開頭的 html
+      - name: Rename to index.html
+        run: |
+          mv VocalTrainer*.html index.html
+
+      # 5. 把新生成的 index.html 推送回倉庫
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          git add index.html
+          # 如果 index.html 有變動才提交，沒變動就不做動作
+          git commit -m "Auto-update index.html via GitHub Actions" || echo "No changes to commit"
+          git push
