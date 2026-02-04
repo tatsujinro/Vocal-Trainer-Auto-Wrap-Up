@@ -639,10 +639,13 @@ output_filename = "VocalTrainer_Offline_v27_1.html"
 
 try:
     print(f"💾 [4/4] 正在寫入 {output_filename} ...")
+    
+    # 強制使用 UTF-8 寫入
     with open(output_filename, "w", encoding="utf-8") as f:
         f.write(final_content)
+        
     print(f"✅ 成功！檔案已建立: {output_filename}")
-    print(f"👉 請上傳至 GitHub，這版包含了藍牙補償與平滑化修正。")
     
 except Exception as e:
     print(f"❌ 寫入檔案失敗: {e}")
+    exit(1) # 🚨 關鍵修正：發生錯誤時強制中止，讓 Action 亮紅燈！
