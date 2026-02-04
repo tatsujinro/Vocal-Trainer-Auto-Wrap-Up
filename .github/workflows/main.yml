@@ -30,31 +30,31 @@ jobs:
           # 這裡填寫你上傳的 Python 檔名，例如 build_offline_app.py
           python build_offline_app.py
 
-      # 4. 部署與封存版本 (嚴格檢查版)
+# 4. 部署與封存版本
       - name: Deploy and Archive Version
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
 
-          # 🔴 設定你「預期」要產生的檔名 (這裡要跟 Python 裡的一樣)
-          TARGET_FILE="VocalTrainer_Offline_v27_1.html"
+          # 🔴 這裡一定要改！要跟 Python 腳本產出的檔名一模一樣！
+          TARGET_FILE="VocalTrainer_Offline_v27_2.html"
 
-          # 檢查檔案是否存在
+          # (這行是舊的，記得改成上面的 v27_2)
+          # TARGET_FILE="VocalTrainer_Offline_v27_1.html" 
+
+          # --- 以下不用動 ---
           if [ -f "$TARGET_FILE" ]; then
             echo "✅ 檢測到目標檔案: $TARGET_FILE"
           else
             echo "❌ 錯誤：找不到 $TARGET_FILE ！Python 建置可能失敗了。"
-            ls -R # 列出當前目錄所有檔案幫忙除錯
-            exit 1 # 強制讓 Action 失敗
+            ls -R
+            exit 1
           fi
 
-          # 複製並部署
           cp -f "$TARGET_FILE" index.html
 
-          # 加入追蹤
           git add "$TARGET_FILE"
           git add index.html
 
-          # 提交
           git commit -m "Auto-deploy: $TARGET_FILE" || echo "⚠️ 沒有變更可提交"
           git push
