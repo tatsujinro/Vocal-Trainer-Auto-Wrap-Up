@@ -3,10 +3,10 @@ import os
 import ssl
 
 # 設定版本號
-VERSION = "v27_2"
+VERSION = "v27_3"
 FILENAME = f"VocalTrainer_Offline_{VERSION}.html"
 
-print(f"🚀 正在開始打包 {VERSION} (變數修復版)...")
+print(f"🚀 正在開始打包 {VERSION} (中位數濾波版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -35,7 +35,7 @@ except Exception as e:
     exit(1)
 
 # ---------------------------------------------------------
-# 4. 定義內容區塊 (明確定義每個變數)
+# 4. 定義內容區塊
 # ---------------------------------------------------------
 
 # Part A: CSS
@@ -88,7 +88,7 @@ CSS_PART = """
 HTML_PART = """
 <div id="loadingMask" class="loading-mask">
     <div style="font-size: 3rem; margin-bottom: 20px;">🎧</div>
-    <div>v27.2 邏輯修復版</div>
+    <div>v27.3 中位數濾波版</div>
     <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化...</div>
     <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem;"></div>
 </div>
@@ -100,7 +100,7 @@ HTML_PART = """
 </div>
 
 <div id="controlsArea">
-    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27.2</span></h1>
+    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27.3</span></h1>
     
     <div class="control-group">
         <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">🎛️ 錄音室混音台</div>
@@ -194,6 +194,10 @@ JS_PART = """
     let gameLoopId;
     let gameTargets = []; 
     let userPitchHistory = [];
+    
+    // v27.3: 新增原始音高緩衝區，用於計算中位數
+    let rawPitchBuffer = []; 
+    
     let score = 0;
     let stats = { perfect:0, good:0, miss:0, totalFrames:0 };
     
@@ -252,11 +256,11 @@ JS_PART = """
             recVocal: document.getElementById('faderVocalRec').value,
             latency: document.getElementById('latencySlider').value
         };
-        localStorage.setItem('v27_2_data', JSON.stringify(data));
+        localStorage.setItem('v27_3_data', JSON.stringify(data));
     }
 
     function loadLocalStorage() {
-        const raw = localStorage.getItem('v27_2_data');
+        const raw = localStorage.getItem('v27_3_data');
         if (raw) {
             try {
                 const data = JSON.parse(raw);
@@ -384,7 +388,7 @@ JS_PART = """
             } catch(e) { canRecord = false; }
         }
         score = 0; stats = { perfect:0, good:0, miss:0, totalFrames:0 };
-        gameTargets = []; userPitchHistory = [];
+        gameTargets = []; userPitchHistory = []; rawPitchBuffer = []; // 清空緩衝區
         currentRoutineIndex = 0; isPlaying = true;
         document.getElementById('controlsArea').classList.add('immersive-hidden');
         document.getElementById('playBtn').innerText = "⏹ 停止";
@@ -441,6 +445,7 @@ JS_PART = """
         ctx.strokeStyle = "#fff"; ctx.beginPath(); ctx.moveTo(canvas.width * 0.2, 0); ctx.lineTo(canvas.width * 0.2, canvas.height); ctx.stroke();
     }
 
+    // v27.3: 使用中位數濾波 (Median Filter) 進行音準平滑
     function detectAndDrawPitch(now, playheadX) {
         if (!vocalAnalyser) return;
         vocalAnalyser.getFloatTimeDomainData(audioBuffer);
@@ -450,14 +455,17 @@ JS_PART = """
 
         if (freq !== -1) {
             let rawMidi = 12 * (Math.log(freq / 440) / Math.log(2)) + 69;
-            if (userPitchHistory.length > 0 && userPitchHistory[userPitchHistory.length - 1].midi) {
-                let prev = userPitchHistory[userPitchHistory.length - 1].midi;
-                if (Math.abs(rawMidi - prev) > 7) {
-                     detectedMidi = prev * 0.9 + rawMidi * 0.1;
-                } else {
-                     detectedMidi = prev * 0.5 + rawMidi * 0.5;
-                }
-            } else { detectedMidi = rawMidi; }
+            
+            // --- 中位數濾波 (Median Filter) 開始 ---
+            rawPitchBuffer.push(rawMidi);
+            if (rawPitchBuffer.length > 5) rawPitchBuffer.shift(); // 保持緩衝區大小為 5
+
+            // 複製並排序
+            let sortedBuffer = rawPitchBuffer.slice().sort((a, b) => a - b);
+            
+            // 取中位數 (Middle element)
+            detectedMidi = sortedBuffer[Math.floor(sortedBuffer.length / 2)];
+            // --- 中位數濾波 結束 ---
 
             let currentTarget = gameTargets.find(t => now >= t.startTime && now <= t.startTime + t.duration);
             if (currentTarget) {
@@ -467,6 +475,9 @@ JS_PART = """
                 else { color = "#ff5252"; stats.miss++; let txt = (detectedMidi > currentTarget.midi) ? "High ⬆" : "Low ⬇"; document.getElementById('hudFeedback').innerText = txt; document.getElementById('hudFeedback').style.color = color; }
             } else { color = "#aaa"; document.getElementById('hudFeedback').innerText = ""; }
             stats.totalFrames++;
+        } else {
+             // 如果沒有聲音，清空緩衝區，避免下次突然跳出來舊數值
+             rawPitchBuffer = [];
         }
 
         userPitchHistory.push({ time: now + VISUAL_OFFSET_SEC, midi: detectedMidi, color: color });
@@ -620,7 +631,7 @@ JS_PART = """
 """
 
 # ---------------------------------------------------------
-# 5. 組合並寫入檔案 (Stream Write)
+# 5. 寫入檔案 (Stream Write)
 # ---------------------------------------------------------
 try:
     print(f"💾 [3/4] 正在寫入 {FILENAME} ...")
