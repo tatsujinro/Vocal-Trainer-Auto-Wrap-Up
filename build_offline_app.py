@@ -3,10 +3,10 @@ import os
 import ssl
 
 # 設定版本號
-VERSION = "v27_5"
+VERSION = "v27_6"
 FILENAME = f"VocalTrainer_Offline_{VERSION}.html"
 
-print(f"🚀 正在開始打包 {VERSION} (高保真錄音室版)...")
+print(f"🚀 正在開始打包 {VERSION} (效能限流+濾波淨化版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -88,7 +88,7 @@ CSS_PART = """
 HTML_PART = """
 <div id="loadingMask" class="loading-mask">
     <div style="font-size: 3rem; margin-bottom: 20px;">🎧</div>
-    <div>v27.5 高保真錄音室版</div>
+    <div>v27.6 效能與畫質雙重優化版</div>
     <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化...</div>
     <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem;"></div>
 </div>
@@ -100,7 +100,7 @@ HTML_PART = """
 </div>
 
 <div id="controlsArea">
-    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27.5</span></h1>
+    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27.6</span></h1>
     
     <div class="control-group">
         <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">🎛️ 錄音室混音台</div>
@@ -188,13 +188,21 @@ JS_PART = """
     let audioCtx, player;
     let pianoSplitterNode, monitorGainNode, recPianoGainNode, recVocalGainNode, mixerNode, micSource, pianoDelayNode; 
     let pianoAnalyser, vocalAnalyser;
+    
+    // v27.6: 低通濾波器節點
+    let lowPassFilterNode;
+    
     let isPlaying = false;
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     let gameLoopId;
     let gameTargets = []; 
     let userPitchHistory = [];
-    let pitchSmoothingBuffer = []; // 5點緩衝
+    let pitchSmoothingBuffer = []; 
+    
+    // v27.6: 性能優化 - 分析限流 (每 50ms 更新一次 = 20FPS)
+    let lastAnalysisTime = 0;
+    const ANALYSIS_INTERVAL = 0.05; 
     
     let score = 0;
     let stats = { perfect:0, good:0, miss:0, totalFrames:0 };
@@ -254,11 +262,11 @@ JS_PART = """
             recVocal: document.getElementById('faderVocalRec').value,
             latency: document.getElementById('latencySlider').value
         };
-        localStorage.setItem('v27_5_data', JSON.stringify(data));
+        localStorage.setItem('v27_6_data', JSON.stringify(data));
     }
 
     function loadLocalStorage() {
-        const raw = localStorage.getItem('v27_5_data');
+        const raw = localStorage.getItem('v27_6_data');
         if (raw) {
             try {
                 const data = JSON.parse(raw);
@@ -354,7 +362,7 @@ JS_PART = """
             
             if (canRecord) {
                 try {
-                    // v27.5: 關鍵修改 - 關閉瀏覽器預設的降噪與回音消除
+                    // v27.6: 保持 "Recording Studio" 模式 (關閉降噪)
                     let constraints = {
                         audio: {
                             echoCancellation: false,
@@ -367,10 +375,17 @@ JS_PART = """
                     let stream = await navigator.mediaDevices.getUserMedia(constraints);
                     micSource = audioCtx.createMediaStreamSource(stream);
                     
-                    // 路徑 A (偵測): 直通
-                    micSource.connect(vocalAnalyser); 
+                    // --- v27.6: 加入 Low-Pass Filter (低通濾波) ---
+                    // 只讓 1000Hz 以下的聲音通過，過濾高頻雜訊與泛音
+                    lowPassFilterNode = audioCtx.createBiquadFilter();
+                    lowPassFilterNode.type = "lowpass";
+                    lowPassFilterNode.frequency.value = 1000;
                     
-                    // 路徑 B (錄音): 經過推桿
+                    // 偵測路徑: Mic -> Filter -> Analyser
+                    micSource.connect(lowPassFilterNode);
+                    lowPassFilterNode.connect(vocalAnalyser);
+                    
+                    // 錄音路徑: Mic -> Gain -> Mixer (保持原音，不過濾)
                     recVocalGainNode = audioCtx.createGain();
                     recVocalGainNode.gain.value = 1.0; 
                     micSource.connect(recVocalGainNode);
@@ -461,8 +476,29 @@ JS_PART = """
     }
 
     function detectAndDrawPitch(now, playheadX) {
+        // v27.6: 限流閥 (Throttle) - 確保每 50ms (20fps) 才執行一次繁重的音準運算
+        if (now - lastAnalysisTime < ANALYSIS_INTERVAL) {
+            // 如果還沒到時間，直接使用「上一次計算的結果」來畫圖 (維持視覺流暢)，但不做數學運算
+            drawPitchHistory(now, playheadX);
+            return;
+        }
+        lastAnalysisTime = now;
+
         if (!vocalAnalyser) return;
         vocalAnalyser.getFloatTimeDomainData(audioBuffer);
+        
+        // v27.6: 噪音閘門 (Noise Gate) - 計算 RMS 音量
+        let rms = 0;
+        for (let i = 0; i < audioBuffer.length; i++) rms += audioBuffer[i] * audioBuffer[i];
+        rms = Math.sqrt(rms / audioBuffer.length);
+        
+        if (rms < 0.01) { // 如果音量太小，視為噪音，不分析
+             // 維持緩衝區但不加入新值，或者清空
+             // 這裡選擇不做動作，讓線條斷開
+             drawPitchHistory(now, playheadX);
+             return; 
+        }
+
         let freq = autoCorrelate(audioBuffer, audioCtx.sampleRate);
         let color = "rgba(255, 255, 255, 0.1)"; 
         let detectedMidi = null;
@@ -470,7 +506,6 @@ JS_PART = """
         if (freq !== -1) {
             let rawMidi = 12 * (Math.log(freq / 440) / Math.log(2)) + 69;
             
-            // v27.5: 沿用 5 點簡單平均 (因為證明了問題在 Echo Cancellation，所以平滑算法保持簡單即可)
             pitchSmoothingBuffer.push(rawMidi);
             if (pitchSmoothingBuffer.length > 5) pitchSmoothingBuffer.shift();
             let sum = pitchSmoothingBuffer.reduce((a, b) => a + b, 0);
@@ -491,6 +526,10 @@ JS_PART = """
         userPitchHistory.push({ time: now + VISUAL_OFFSET_SEC, midi: detectedMidi, color: color });
         while(userPitchHistory.length > 0 && userPitchHistory[0].time < now - 1.0) { userPitchHistory.shift(); }
 
+        drawPitchHistory(now, playheadX);
+    }
+    
+    function drawPitchHistory(now, playheadX) {
         if (userPitchHistory.length > 1) {
             ctx.lineWidth = 20; ctx.lineCap = "round"; ctx.lineJoin = "round"; 
             for (let i = 1; i < userPitchHistory.length; i++) {
