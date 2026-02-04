@@ -30,24 +30,31 @@ jobs:
           # 這裡填寫你上傳的 Python 檔名，例如 build_offline_app.py
           python build_offline_app.py
 
-# 4. 部署與封存版本 (合併處理，確保兩個檔案都被上傳)
+      # 4. 部署與封存版本 (嚴格檢查版)
       - name: Deploy and Archive Version
         run: |
-          # 設定 Git 身份
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
 
-          # 1. 抓出剛產生的版本檔案 (例如 v27)
-          VERSION_FILE=$(ls VocalTrainer_Offline_*.html | head -n 1)
-          echo "👉 發現新版本檔案: $VERSION_FILE"
+          # 🔴 設定你「預期」要產生的檔名 (這裡要跟 Python 裡的一樣)
+          TARGET_FILE="VocalTrainer_Offline_v27_1.html"
 
-          # 2. 複製一份變成 index.html (覆蓋舊的)
-          cp -f "$VERSION_FILE" index.html
+          # 檢查檔案是否存在
+          if [ -f "$TARGET_FILE" ]; then
+            echo "✅ 檢測到目標檔案: $TARGET_FILE"
+          else
+            echo "❌ 錯誤：找不到 $TARGET_FILE ！Python 建置可能失敗了。"
+            ls -R # 列出當前目錄所有檔案幫忙除錯
+            exit 1 # 強制讓 Action 失敗
+          fi
 
-          # 3. 【關鍵修正】把「版本檔案」和「index.html」通通加入追蹤
-          git add "$VERSION_FILE"
+          # 複製並部署
+          cp -f "$TARGET_FILE" index.html
+
+          # 加入追蹤
+          git add "$TARGET_FILE"
           git add index.html
 
-          # 4. 提交並推送
-          git commit -m "Auto-deploy: $VERSION_FILE" || echo "⚠️ 沒有偵測到檔案變動"
+          # 提交
+          git commit -m "Auto-deploy: $TARGET_FILE" || echo "⚠️ 沒有變更可提交"
           git push
