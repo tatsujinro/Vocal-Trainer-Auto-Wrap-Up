@@ -3,10 +3,10 @@ import os
 import ssl
 
 # 設定版本號
-VERSION = "v27_3"
+VERSION = "v27_4"
 FILENAME = f"VocalTrainer_Offline_{VERSION}.html"
 
-print(f"🚀 正在開始打包 {VERSION} (中位數濾波版)...")
+print(f"🚀 正在開始打包 {VERSION} (原始增益+分流偵測版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -88,7 +88,7 @@ CSS_PART = """
 HTML_PART = """
 <div id="loadingMask" class="loading-mask">
     <div style="font-size: 3rem; margin-bottom: 20px;">🎧</div>
-    <div>v27.3 中位數濾波版</div>
+    <div>v27.4 原始增益回歸版</div>
     <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化...</div>
     <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem;"></div>
 </div>
@@ -100,7 +100,7 @@ HTML_PART = """
 </div>
 
 <div id="controlsArea">
-    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27.3</span></h1>
+    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27.4</span></h1>
     
     <div class="control-group">
         <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">🎛️ 錄音室混音台</div>
@@ -112,7 +112,7 @@ HTML_PART = """
                 <div style="font-size:0.7rem; color:#666; margin-top:3px;">40%</div>
             </div>
             <div class="mixer-channel">
-                <div class="mixer-label">🎤 人聲</div>
+                <div class="mixer-label">🎤 人聲 (錄音量)</div>
                 <div class="meter-box"><div class="meter-fill" id="meterVocal"></div></div>
                 <div class="fader-wrapper"><input type="range" id="faderVocalRec" min="0" max="300" value="100"></div>
                 <div style="font-size:0.7rem; color:#666; margin-top:3px;">100%</div>
@@ -195,8 +195,8 @@ JS_PART = """
     let gameTargets = []; 
     let userPitchHistory = [];
     
-    // v27.3: 新增原始音高緩衝區，用於計算中位數
-    let rawPitchBuffer = []; 
+    // v27.4: 回歸 5 點緩衝 (Buffer)
+    let pitchSmoothingBuffer = []; 
     
     let score = 0;
     let stats = { perfect:0, good:0, miss:0, totalFrames:0 };
@@ -256,11 +256,11 @@ JS_PART = """
             recVocal: document.getElementById('faderVocalRec').value,
             latency: document.getElementById('latencySlider').value
         };
-        localStorage.setItem('v27_3_data', JSON.stringify(data));
+        localStorage.setItem('v27_4_data', JSON.stringify(data));
     }
 
     function loadLocalStorage() {
-        const raw = localStorage.getItem('v27_3_data');
+        const raw = localStorage.getItem('v27_4_data');
         if (raw) {
             try {
                 const data = JSON.parse(raw);
@@ -357,11 +357,19 @@ JS_PART = """
             if (canRecord) {
                 try {
                     let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    // v27.4: 創建麥克風源
                     micSource = audioCtx.createMediaStreamSource(stream);
+                    
+                    // --- 路徑 A (偵測用)：直通原始訊號 ---
+                    // 不經過任何 Gain，直接進分析儀，避免 Clipping
+                    micSource.connect(vocalAnalyser); 
+                    
+                    // --- 路徑 B (錄音用)：可調增益 ---
                     recVocalGainNode = audioCtx.createGain();
+                    recVocalGainNode.gain.value = 1.0; // 預設 100%
                     micSource.connect(recVocalGainNode);
                     recVocalGainNode.connect(mixerNode);
-                    recVocalGainNode.connect(vocalAnalyser); 
+                    
                 } catch (e) {
                     canRecord = false; document.getElementById('micWarning').style.display = 'block';
                 }
@@ -388,7 +396,7 @@ JS_PART = """
             } catch(e) { canRecord = false; }
         }
         score = 0; stats = { perfect:0, good:0, miss:0, totalFrames:0 };
-        gameTargets = []; userPitchHistory = []; rawPitchBuffer = []; // 清空緩衝區
+        gameTargets = []; userPitchHistory = []; pitchSmoothingBuffer = [];
         currentRoutineIndex = 0; isPlaying = true;
         document.getElementById('controlsArea').classList.add('immersive-hidden');
         document.getElementById('playBtn').innerText = "⏹ 停止";
@@ -433,6 +441,7 @@ JS_PART = """
             document.getElementById('meterPiano').style.width = Math.min(100, avg * 1.5) + "%";
         }
         if(vocalAnalyser) {
+            // v27.4: 這裡 vocalAnalyser 接收的是 Raw Signal，所以 Meter 顯示的也是原始音量 (不會破表)
             let arr = new Uint8Array(vocalAnalyser.frequencyBinCount); vocalAnalyser.getByteFrequencyData(arr);
             let avg = arr.reduce((a,b)=>a+b,0) / arr.length;
             document.getElementById('meterVocal').style.width = Math.min(100, avg * 2.0) + "%";
@@ -445,7 +454,6 @@ JS_PART = """
         ctx.strokeStyle = "#fff"; ctx.beginPath(); ctx.moveTo(canvas.width * 0.2, 0); ctx.lineTo(canvas.width * 0.2, canvas.height); ctx.stroke();
     }
 
-    // v27.3: 使用中位數濾波 (Median Filter) 進行音準平滑
     function detectAndDrawPitch(now, playheadX) {
         if (!vocalAnalyser) return;
         vocalAnalyser.getFloatTimeDomainData(audioBuffer);
@@ -456,16 +464,13 @@ JS_PART = """
         if (freq !== -1) {
             let rawMidi = 12 * (Math.log(freq / 440) / Math.log(2)) + 69;
             
-            // --- 中位數濾波 (Median Filter) 開始 ---
-            rawPitchBuffer.push(rawMidi);
-            if (rawPitchBuffer.length > 5) rawPitchBuffer.shift(); // 保持緩衝區大小為 5
-
-            // 複製並排序
-            let sortedBuffer = rawPitchBuffer.slice().sort((a, b) => a - b);
+            // v27.4: 回歸單純的 5 點移動平均
+            pitchSmoothingBuffer.push(rawMidi);
+            if (pitchSmoothingBuffer.length > 5) pitchSmoothingBuffer.shift();
             
-            // 取中位數 (Middle element)
-            detectedMidi = sortedBuffer[Math.floor(sortedBuffer.length / 2)];
-            // --- 中位數濾波 結束 ---
+            // 計算平均
+            let sum = pitchSmoothingBuffer.reduce((a, b) => a + b, 0);
+            detectedMidi = sum / pitchSmoothingBuffer.length;
 
             let currentTarget = gameTargets.find(t => now >= t.startTime && now <= t.startTime + t.duration);
             if (currentTarget) {
@@ -476,8 +481,8 @@ JS_PART = """
             } else { color = "#aaa"; document.getElementById('hudFeedback').innerText = ""; }
             stats.totalFrames++;
         } else {
-             // 如果沒有聲音，清空緩衝區，避免下次突然跳出來舊數值
-             rawPitchBuffer = [];
+             // 沒聲音就清空緩衝，避免拖泥帶水
+             pitchSmoothingBuffer = [];
         }
 
         userPitchHistory.push({ time: now + VISUAL_OFFSET_SEC, midi: detectedMidi, color: color });
