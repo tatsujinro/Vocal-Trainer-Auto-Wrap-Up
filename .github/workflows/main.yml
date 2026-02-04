@@ -30,31 +30,38 @@ jobs:
           # 這裡填寫你上傳的 Python 檔名，例如 build_offline_app.py
           python build_offline_app.py
 
-# 4. 部署與封存版本
+      # 4. 部署與封存版本 (智慧動態抓取版)
       - name: Deploy and Archive Version
         run: |
+          # 設定 Git 機器人身份
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
 
-          # 🔴 這裡一定要改！要跟 Python 腳本產出的檔名一模一樣！
-          TARGET_FILE="VocalTrainer_Offline_v27_2.html"
+          # --- 🧠 核心修改：智慧抓取邏輯 ---
+          # ls -t: 按時間排序 (最新的在最上面)
+          # head -n 1: 只取第一行 (也就是最新的那個)
+          TARGET_FILE=$(ls -t VocalTrainer_Offline_*.html | head -n 1)
 
-          # (這行是舊的，記得改成上面的 v27_2)
-          # TARGET_FILE="VocalTrainer_Offline_v27_1.html" 
-
-          # --- 以下不用動 ---
-          if [ -f "$TARGET_FILE" ]; then
-            echo "✅ 檢測到目標檔案: $TARGET_FILE"
-          else
-            echo "❌ 錯誤：找不到 $TARGET_FILE ！Python 建置可能失敗了。"
-            ls -R
-            exit 1
+          # --- 🛡️ 安全檢查 ---
+          # -z 代表字串是空的 (沒抓到檔案)
+          if [ -z "$TARGET_FILE" ]; then
+            echo "❌ 嚴重錯誤：找不到任何 VocalTrainer_Offline 開頭的 HTML 檔案！"
+            echo "請檢查 Python 腳本是否成功執行並寫入檔案。"
+            ls -R # 列出所有檔案幫忙除錯
+            exit 1 # 強制報錯停止
           fi
 
+          echo "✅ 自動偵測到最新版本: $TARGET_FILE"
+
+          # --- 🚚 開始搬運 ---
+          # 複製一份變成 index.html (覆蓋舊的)
           cp -f "$TARGET_FILE" index.html
 
+          # 把「最新版號檔案」和「首頁」都加入 Git
           git add "$TARGET_FILE"
           git add index.html
 
+          # 提交並推送
+          # 提交訊息會自動帶入抓到的檔名，方便你以後查閱
           git commit -m "Auto-deploy: $TARGET_FILE" || echo "⚠️ 沒有變更可提交"
           git push
