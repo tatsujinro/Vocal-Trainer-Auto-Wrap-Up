@@ -2,7 +2,7 @@ import urllib.request
 import os
 import ssl
 
-print("🚀 正在開始打包 v27.1 (穩健修復版)...")
+print("🚀 正在開始打包 v27.2 (邏輯修復版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -28,13 +28,13 @@ try:
         
 except Exception as e:
     print(f"❌ 下載失敗: {e}")
-    exit()
+    exit(1)
 
 # ---------------------------------------------------------
-# 4. 定義各個區塊 (拆開以確保穩定性)
+# 4. 定義各個區塊
 # ---------------------------------------------------------
 
-# Part A: CSS 樣式
+# Part A: CSS
 css_part = """
 <style>
     :root { --bg-color: #000000; --ui-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #00e5ff; --meter-green: #00e676; --meter-yellow: #ffea00; --meter-red: #ff5252; }
@@ -80,11 +80,11 @@ css_part = """
 </style>
 """
 
-# Part B: HTML 結構
+# Part B: HTML
 html_part = """
 <div id="loadingMask" class="loading-mask">
     <div style="font-size: 3rem; margin-bottom: 20px;">🎧</div>
-    <div>v27.1 藍牙補償版</div>
+    <div>v27.2 邏輯修復版</div>
     <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化...</div>
     <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem;"></div>
 </div>
@@ -96,7 +96,7 @@ html_part = """
 </div>
 
 <div id="controlsArea">
-    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27.1</span></h1>
+    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27.2</span></h1>
     
     <div class="control-group">
         <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">🎛️ 錄音室混音台</div>
@@ -177,7 +177,7 @@ html_part = """
 </div>
 """
 
-# Part C: JavaScript 邏輯
+# Part C: JavaScript
 js_part = """
 <script>
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -193,7 +193,6 @@ js_part = """
     let score = 0;
     let stats = { perfect:0, good:0, miss:0, totalFrames:0 };
     
-    // v27.1: 視覺參數
     const PIXELS_PER_SEC = 100;
     const PIXELS_PER_SEMITONE = 15;
     const VISUAL_OFFSET_SEC = 0.15; 
@@ -249,11 +248,11 @@ js_part = """
             recVocal: document.getElementById('faderVocalRec').value,
             latency: document.getElementById('latencySlider').value
         };
-        localStorage.setItem('v27_1_data', JSON.stringify(data));
+        localStorage.setItem('v27_2_data', JSON.stringify(data));
     }
 
     function loadLocalStorage() {
-        const raw = localStorage.getItem('v27_1_data');
+        const raw = localStorage.getItem('v27_2_data');
         if (raw) {
             try {
                 const data = JSON.parse(raw);
@@ -340,7 +339,6 @@ js_part = """
             pianoSplitterNode.connect(monitorGainNode);
             monitorGainNode.connect(audioCtx.destination);
             
-            // 延遲節點 (藍牙補償)
             pianoDelayNode = audioCtx.createDelay(1.0);
             recPianoGainNode = audioCtx.createGain();
             pianoSplitterNode.connect(pianoDelayNode);
@@ -439,6 +437,7 @@ js_part = """
         ctx.strokeStyle = "#fff"; ctx.beginPath(); ctx.moveTo(canvas.width * 0.2, 0); ctx.lineTo(canvas.width * 0.2, canvas.height); ctx.stroke();
     }
 
+    // v27.2: 音準平滑修正
     function detectAndDrawPitch(now, playheadX) {
         if (!vocalAnalyser) return;
         vocalAnalyser.getFloatTimeDomainData(audioBuffer);
@@ -448,10 +447,19 @@ js_part = """
 
         if (freq !== -1) {
             let rawMidi = 12 * (Math.log(freq / 440) / Math.log(2)) + 69;
-            // 平滑化 (15個點的移動平均概念)
+            
+            // v27.2: 倍頻與平滑修正
             if (userPitchHistory.length > 0 && userPitchHistory[userPitchHistory.length - 1].midi) {
                 let prev = userPitchHistory[userPitchHistory.length - 1].midi;
-                detectedMidi = prev * 0.85 + rawMidi * 0.15; // 提高平滑係數
+                
+                // 倍頻檢查: 如果跳太遠 (超過7個半音)，降低平滑權重(或暫時忽略)
+                if (Math.abs(rawMidi - prev) > 7) {
+                     // 這裡選擇比較保守的更新: 稍微跟隨，但不大改
+                     detectedMidi = prev * 0.9 + rawMidi * 0.1;
+                } else {
+                     // 正常情況: 平滑係數 0.5 (平衡)
+                     detectedMidi = prev * 0.5 + rawMidi * 0.5;
+                }
             } else { detectedMidi = rawMidi; }
 
             let currentTarget = gameTargets.find(t => now >= t.startTime && now <= t.startTime + t.duration);
@@ -468,7 +476,7 @@ js_part = """
         while(userPitchHistory.length > 0 && userPitchHistory[0].time < now - 1.0) { userPitchHistory.shift(); }
 
         if (userPitchHistory.length > 1) {
-            ctx.lineWidth = 20; ctx.lineCap = "round"; ctx.lineJoin = "round"; // 視覺加粗
+            ctx.lineWidth = 20; ctx.lineCap = "round"; ctx.lineJoin = "round"; 
             for (let i = 1; i < userPitchHistory.length; i++) {
                 let p1 = userPitchHistory[i-1]; let p2 = userPitchHistory[i];
                 if (p1.midi && p2.midi && Math.abs(p1.midi - p2.midi) < 2) { 
@@ -514,11 +522,20 @@ js_part = """
         }
         nextNoteTime += (countInBeats * beatDur);
         
-        let root1 = getMidiPitch(currentRoots[0]); previewPatternVisuals(root1, nextNoteTime, beatDur);
+        // v27.2: 修正 Pattern 接力 (一次預判 3 個)
+        let root1 = getMidiPitch(currentRoots[0]); 
+        previewPatternVisuals(root1, nextNoteTime, beatDur);
+
         if (currentRoots.length > 1) {
             let root2 = getMidiPitch(currentRoots[1]);
             let len = (routineQueue[currentRoutineIndex].mode==='scale5') ? 9 : (routineQueue[currentRoutineIndex].mode==='triad') ? 5 : 3; 
             previewPatternVisuals(root2, nextNoteTime + (len+2)*beatDur, beatDur);
+            
+            // 這裡補上第三個 (P3)，防止接棒掉落
+            if (currentRoots.length > 2) {
+                 let root3 = getMidiPitch(currentRoots[2]);
+                 previewPatternVisuals(root3, nextNoteTime + (len+2)*beatDur*2, beatDur);
+            }
         }
     }
 
@@ -615,13 +632,12 @@ js_part = """
 
 print("🔨 [3/4] 正在組裝 HTML 檔案...")
 
-# 使用 split/join 技巧，避免字串過長的問題
 final_content = """<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>吉他手聲樂教練 v27.1</title>
+    <title>!!!Right On Pitch!!! Your Daily Vocal Workout v27.2</title>
 """ + css_part + """
 </head>
 <body>
@@ -635,17 +651,14 @@ final_content = """<!DOCTYPE html>
 </html>
 """
 
-output_filename = "VocalTrainer_Offline_v27_1.html"
+output_filename = "VocalTrainer_Offline_v27_2.html"
 
 try:
     print(f"💾 [4/4] 正在寫入 {output_filename} ...")
-    
-    # 強制使用 UTF-8 寫入
     with open(output_filename, "w", encoding="utf-8") as f:
         f.write(final_content)
-        
     print(f"✅ 成功！檔案已建立: {output_filename}")
     
 except Exception as e:
     print(f"❌ 寫入檔案失敗: {e}")
-    exit(1) # 🚨 關鍵修正：發生錯誤時強制中止，讓 Action 亮紅燈！
+    exit(1)
