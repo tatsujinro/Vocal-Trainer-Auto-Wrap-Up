@@ -30,11 +30,18 @@ jobs:
           # 這裡填寫你上傳的 Python 檔名，例如 build_offline_app.py
           python build_offline_app.py
 
-      # 4. 把生成的檔案改名為 index.html (這樣 GitHub Pages 才能讀取)
-      # 注意：這裡假設生成的檔案是 VocalTrainer 開頭的 html
-      - name: Rename to index.html
+      # 4. 複製一份成為 index.html (保留原檔名)
+      - name: Update Index and Keep Version
         run: |
-          mv VocalTrainer*.html index.html
+          # 找到剛剛 Python 生成的檔案 (例如 VocalTrainer_Offline_v26.html)
+          GENERATED_FILE=$(ls VocalTrainer_Offline_*.html | head -n 1)
+          
+          # 印出來確認一下 (方便除錯)
+          echo "Found version file: $GENERATED_FILE"
+          
+          # 【關鍵步驟】複製它變成 index.html (cp = copy)
+          # 這樣原本的 v26 檔案還在，同時 index.html 也變成了 v26
+          cp "$GENERATED_FILE" index.html
 
       # 5. 把新生成的 index.html 推送回倉庫
       - name: Commit and Push changes
