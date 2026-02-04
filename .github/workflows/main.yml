@@ -30,25 +30,24 @@ jobs:
           # 這裡填寫你上傳的 Python 檔名，例如 build_offline_app.py
           python build_offline_app.py
 
-      # 4. 複製一份成為 index.html (保留原檔名)
-      - name: Update Index and Keep Version
+# 4. 部署與封存版本 (合併處理，確保兩個檔案都被上傳)
+      - name: Deploy and Archive Version
         run: |
-          # 找到剛剛 Python 生成的檔案 (例如 VocalTrainer_Offline_v26.html)
-          GENERATED_FILE=$(ls VocalTrainer_Offline_*.html | head -n 1)
-          
-          # 印出來確認一下 (方便除錯)
-          echo "Found version file: $GENERATED_FILE"
-          
-          # 【關鍵步驟】複製它變成 index.html (cp = copy)
-          # 這樣原本的 v26 檔案還在，同時 index.html 也變成了 v26
-          cp "$GENERATED_FILE" index.html
-
-      # 5. 把新生成的 index.html 推送回倉庫
-      - name: Commit and Push changes
-        run: |
+          # 設定 Git 身份
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
+
+          # 1. 抓出剛產生的版本檔案 (例如 v27)
+          VERSION_FILE=$(ls VocalTrainer_Offline_*.html | head -n 1)
+          echo "👉 發現新版本檔案: $VERSION_FILE"
+
+          # 2. 複製一份變成 index.html (覆蓋舊的)
+          cp -f "$VERSION_FILE" index.html
+
+          # 3. 【關鍵修正】把「版本檔案」和「index.html」通通加入追蹤
+          git add "$VERSION_FILE"
           git add index.html
-          # 如果 index.html 有變動才提交，沒變動就不做動作
-          git commit -m "Auto-update index.html via GitHub Actions" || echo "No changes to commit"
+
+          # 4. 提交並推送
+          git commit -m "Auto-deploy: $VERSION_FILE" || echo "⚠️ 沒有偵測到檔案變動"
           git push
