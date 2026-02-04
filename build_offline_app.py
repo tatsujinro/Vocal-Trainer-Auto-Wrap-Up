@@ -3,10 +3,10 @@ import os
 import ssl
 
 # 設定版本號
-VERSION = "v28_2"
+VERSION = "v28_4"
 FILENAME = f"VocalTrainer_Offline_{VERSION}.html"
 
-print(f"🚀 正在開始打包 {VERSION} (動態增益控制版)...")
+print(f"🚀 正在開始打包 {VERSION} (緊急修復版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -87,8 +87,8 @@ CSS_PART = """
 HTML_PART = """
 <div id="loadingMask" class="loading-mask">
     <div style="font-size: 3rem; margin-bottom: 20px;">🎧</div>
-    <div>v28.2 動態增益控制版</div>
-    <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化... (Limiter On)</div>
+    <div>v28.4 緊急修復版</div>
+    <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化... (訊號重建中)</div>
     <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem;"></div>
 </div>
 
@@ -99,13 +99,13 @@ HTML_PART = """
 </div>
 
 <div id="controlsArea">
-    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v28.2</span></h1>
+    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v28.4</span></h1>
     
     <div class="control-group">
-        <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">📊 訊號狀態 (Auto-Leveling)</div>
+        <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">📊 訊號狀態 (Input Gain: 50%)</div>
         <div class="mixer-container">
             <div class="mixer-channel">
-                <div class="mixer-label">人聲 (壓縮後)</div>
+                <div class="mixer-label">人聲輸入 (僅偵測)</div>
                 <div class="meter-box"><div class="meter-fill" id="meterVocal"></div></div>
             </div>
             <div class="mixer-channel">
@@ -168,9 +168,9 @@ JS_PART = """
 <script>
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     let audioCtx, player;
-    let monitorGainNode, micSource; 
+    let pianoSplitterNode, monitorGainNode, micSource; 
     let pianoAnalyser, vocalAnalyser;
-    let lowPassFilterNode, compressorNode, inputGainNode;
+    let lowPassFilterNode, inputGainNode;
     
     let isPlaying = false;
     const canvas = document.getElementById('gameCanvas');
@@ -203,8 +203,8 @@ JS_PART = """
 
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     
-    // Global Memory Pools
-    const FFT_SIZE = 256;
+    // v28.4: 確保 FFT_SIZE 足夠大 (2048) 以偵測低頻
+    const FFT_SIZE = 2048; 
     const BUF_SIZE = 2048;
     let audioDataBuffer = new Float32Array(BUF_SIZE); 
     let meterBuffer = new Uint8Array(FFT_SIZE);       
@@ -241,11 +241,11 @@ JS_PART = """
             profiles: rangeProfiles, routine: routineQueue, bpm: document.getElementById('bpm').value,
             volMonitor: document.getElementById('volMonitor').value
         };
-        localStorage.setItem('v28_2_data', JSON.stringify(data));
+        localStorage.setItem('v28_4_data', JSON.stringify(data));
     }
 
     function loadLocalStorage() {
-        const raw = localStorage.getItem('v28_2_data');
+        const raw = localStorage.getItem('v28_4_data');
         if (raw) {
             try {
                 const data = JSON.parse(raw);
@@ -309,11 +309,23 @@ JS_PART = """
     async function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            pianoAnalyser = audioCtx.createAnalyser(); pianoAnalyser.fftSize = 256;
-            vocalAnalyser = audioCtx.createAnalyser(); vocalAnalyser.fftSize = 256;
+            pianoAnalyser = audioCtx.createAnalyser(); 
+            pianoAnalyser.fftSize = 256; // 鋼琴只需要視覺，解析度低沒關係
             
+            vocalAnalyser = audioCtx.createAnalyser(); 
+            // v28.4: 關鍵修正! 設為 2048 才能解析低頻人聲
+            vocalAnalyser.fftSize = 2048; 
+            
+            // v28.4: 重建鋼琴分流器 (Splitter)
+            pianoSplitterNode = audioCtx.createGain();
             monitorGainNode = audioCtx.createGain();
+            
+            // 連接: Splitter -> Monitor -> Speaker
+            pianoSplitterNode.connect(monitorGainNode);
             monitorGainNode.connect(audioCtx.destination);
+            
+            // 連接: Splitter -> Analyser (Visuals)
+            pianoSplitterNode.connect(pianoAnalyser);
             
             if (canRecord) {
                 try {
@@ -329,29 +341,19 @@ JS_PART = """
                     let stream = await navigator.mediaDevices.getUserMedia(constraints);
                     micSource = audioCtx.createMediaStreamSource(stream);
                     
-                    // --- v28.2: 動態增益鏈 (Signal Chain) ---
-                    
-                    // 1. Input Gain (前級衰減 50%) - 避免 Clipping
+                    // --- 簡化且強健的人聲鏈路 (Robust Vocal Chain) ---
+                    // 1. 前級衰減 (Input Gain 0.5) - 解決 Clipping
                     inputGainNode = audioCtx.createGain();
                     inputGainNode.gain.value = 0.5;
                     
-                    // 2. Dynamics Compressor (限制器/壓縮器)
-                    compressorNode = audioCtx.createDynamicsCompressor();
-                    compressorNode.threshold.value = -24; // 門檻
-                    compressorNode.knee.value = 30;
-                    compressorNode.ratio.value = 12;      // 壓縮比 (像 Limiter)
-                    compressorNode.attack.value = 0.003;  // 快速啟動
-                    compressorNode.release.value = 0.25;
-                    
-                    // 3. Low-Pass Filter (低通濾波)
+                    // 2. 低通濾波 (Low-Pass 1000Hz) - 解決高頻雜訊
                     lowPassFilterNode = audioCtx.createBiquadFilter();
                     lowPassFilterNode.type = "lowpass";
                     lowPassFilterNode.frequency.value = 1000;
                     
-                    // 連接鏈路: Mic -> Gain(0.5) -> Compressor -> Filter -> Analyser
+                    // 連接: Mic -> Gain -> Filter -> Analyser
                     micSource.connect(inputGainNode);
-                    inputGainNode.connect(compressorNode);
-                    compressorNode.connect(lowPassFilterNode);
+                    inputGainNode.connect(lowPassFilterNode);
                     lowPassFilterNode.connect(vocalAnalyser);
                     
                 } catch (e) {
@@ -435,7 +437,6 @@ JS_PART = """
 
         if (!vocalAnalyser) return;
         
-        // 使用 Global Buffer，不 New 新物件
         vocalAnalyser.getFloatTimeDomainData(audioDataBuffer);
         
         let rms = 0;
@@ -491,112 +492,18 @@ JS_PART = """
         }
     }
 
+    function closeResult() { 
+        document.getElementById('resultModal').style.display = 'none'; 
+        document.getElementById('controlsArea').classList.remove('immersive-hidden');
+        document.getElementById('playBtn').innerText = "▶ 開始特訓";
+        document.getElementById('playBtn').classList.remove('stop');
+    }
+
     function getYfromMidi(midi) { return (canvas.height / 2) - (midi - viewCenterMidi) * PIXELS_PER_SEMITONE; }
-    
-    function generateRootsFromConfig(config) {
-        let allOpts = []; for(let oct=2; oct<=5; oct++) notes.forEach(n => allOpts.push(`${n}${oct}`));
-        let sIdx = allOpts.indexOf(config.s), pIdx = allOpts.indexOf(config.p), eIdx = allOpts.indexOf(config.e);
-        currentRoots = [];
-        if (sIdx <= pIdx) for(let i=sIdx; i<=pIdx; i++) currentRoots.push(allOpts[i]); else currentRoots.push(config.s);
-        globalPeakIndex = currentRoots.length - 1;
-        if (eIdx < pIdx && eIdx >= 0) for(let i=pIdx-1; i>=eIdx; i--) currentRoots.push(allOpts[i]);
-        viewCenterMidi = (getMidiPitch(config.s) + getMidiPitch(config.p)) / 2;
-    }
-
-    function previewPatternVisuals(root, startTime, beatDur) {
-        let mode = routineQueue[currentRoutineIndex].mode;
-        let intervals = (mode==='triad')?[0,4,7,4,0] : (mode==='scale5')?[0,2,4,5,7,5,4,2,0] : (mode==='octave')?[0,12,0] : (mode==='p5')?[0,7,0] : [0,5,0];
-        for(let i=0; i<intervals.length; i++) {
-            gameTargets.push({ midi: root + intervals[i], startTime: startTime + (i * beatDur), duration: beatDur * 0.95 });
-        }
-    }
-
-    function startRoutineItem() {
-        rootIndex = 0; patternStepIndex = 0;
-        let config = routineQueue[currentRoutineIndex]; generateRootsFromConfig(config); renderRoutine();
-        let bpm = document.getElementById('bpm').value; let beatDur = 60.0 / bpm;
-        let now = audioCtx.currentTime; if (nextNoteTime < now) nextNoteTime = now + 0.5;
-        for(let i=0; i<countInBeats; i++) {
-            let t = nextNoteTime + (i * beatDur); playStickClick(t);
-            if(i === 0) {
-                let root = getMidiPitch(currentRoots[0]); playChord(root, t, beatDur * 4);
-                gameTargets.push({ midi: root, startTime: t, duration: beatDur * 4 });
-            }
-        }
-        nextNoteTime += (countInBeats * beatDur);
-        
-        let root1 = getMidiPitch(currentRoots[0]); 
-        previewPatternVisuals(root1, nextNoteTime, beatDur);
-        if (currentRoots.length > 1) {
-            let root2 = getMidiPitch(currentRoots[1]);
-            let len = (routineQueue[currentRoutineIndex].mode==='scale5') ? 9 : (routineQueue[currentRoutineIndex].mode==='triad') ? 5 : 3; 
-            previewPatternVisuals(root2, nextNoteTime + (len+2)*beatDur, beatDur);
-            if (currentRoots.length > 2) {
-                 let root3 = getMidiPitch(currentRoots[2]);
-                 previewPatternVisuals(root3, nextNoteTime + (len+2)*beatDur*2, beatDur);
-            }
-        }
-    }
-
-    function scheduler() {
-        while (isPlaying && nextNoteTime < audioCtx.currentTime + scheduleAheadTime) { scheduleNote(rootIndex, patternStepIndex, nextNoteTime); nextStep(); }
-        if (isPlaying) timerID = window.setTimeout(scheduler, lookahead);
-    }
-
-    function nextStep() {
-        let bpm = document.getElementById('bpm').value; let beatDur = 60.0 / bpm;
-        nextNoteTime += beatDur;
-        let mode = routineQueue[currentRoutineIndex].mode;
-        let len = (mode==='triad')?4 : (mode==='scale5')?8 : 2; // intervals.length - 1
-        patternStepIndex++;
-        if (patternStepIndex > len + 2) {
-            patternStepIndex = 0; rootIndex++;
-            if (rootIndex >= currentRoots.length) {
-                currentRoutineIndex++;
-                if (currentRoutineIndex < routineQueue.length) { nextNoteTime += 2.0; startRoutineItem(); } else { stop(); }
-            } else {
-                let futureIndex = rootIndex + 2; 
-                if(futureIndex < currentRoots.length) {
-                    let nextRoot = getMidiPitch(currentRoots[futureIndex]);
-                    let pLen = (mode==='scale5') ? 9 : (mode==='triad') ? 5 : 3; 
-                    previewPatternVisuals(nextRoot, nextNoteTime + (pLen+2)*beatDur*2, beatDur);
-                }
-            }
-        }
-    }
-
-    function scheduleNote(idx, step, time) {
-        if(idx >= currentRoots.length) return;
-        let root = getMidiPitch(currentRoots[idx]); let bpm = document.getElementById('bpm').value; let beatDur = 60.0 / bpm;
-        let mode = routineQueue[currentRoutineIndex].mode;
-        let intervals = (mode==='triad')?[0,4,7,4,0] : (mode==='scale5')?[0,2,4,5,7,5,4,2,0] : (mode==='octave')?[0,12,0] : (mode==='p5')?[0,7,0] : [0,5,0];
-        if (step < intervals.length) {
-            let note = root + intervals[step]; let preset = _tone_0000_JCLive_sf2_file;
-            player.queueWaveTable(audioCtx, monitorGainNode, preset, time, note, beatDur*0.9, 1.0);
-            if(step===0) playChord(root, time, beatDur*intervals.length);
-        } else {
-            if(step === intervals.length) playChord(root, time, beatDur);
-            else if(step === intervals.length + 1) {
-                let nextRoot = (idx+1 < currentRoots.length) ? getMidiPitch(currentRoots[idx+1]) : root;
-                playChord(nextRoot, time, beatDur);
-            }
-        }
-    }
-
-    function showResultModal() {
-        let modal = document.getElementById('resultModal'); modal.style.display = 'flex';
-        document.getElementById('finalScore').innerText = score;
-        let total = stats.totalFrames || 1;
-        document.getElementById('statPerfect').innerText = Math.round((stats.perfect/total)*100) + "%";
-        document.getElementById('statGood').innerText = Math.round((stats.good/total)*100) + "%";
-        document.getElementById('statMiss').innerText = Math.round((stats.miss/total)*100) + "%";
-        document.getElementById('audioPlayerWrapper').style.display = 'none';
-        document.getElementById('noRecMsg').style.display = 'none';
-    }
-    function closeResult() { document.getElementById('resultModal').style.display = 'none'; }
     function getMidiPitch(n) { let note = n.slice(0, -1), oct = parseInt(n.slice(-1)); return notes.indexOf(note) + (oct + 1) * 12; }
     function playStickClick(t) { let osc = audioCtx.createOscillator(); let g = audioCtx.createGain(); osc.frequency.setValueAtTime(1200, t); osc.frequency.exponentialRampToValueAtTime(800, t+0.05); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5, t+0.001); g.gain.exponentialRampToValueAtTime(0.001, t+0.08); osc.connect(g); g.connect(audioCtx.destination); osc.start(t); osc.stop(t+0.1); }
-    function playChord(root, t, dur) { let preset = _tone_0000_JCLive_sf2_file; [0,4,7].forEach(s => player.queueWaveTable(audioCtx, monitorGainNode, preset, t, root+s, dur, 0.5)); }
+    // v28.4: 確保使用 pianoSplitterNode 作為輸入，才能同時發聲+視覺
+    function playChord(root, t, dur) { let preset = _tone_0000_JCLive_sf2_file; [0,4,7].forEach(s => player.queueWaveTable(audioCtx, pianoSplitterNode, preset, t, root+s, dur, 0.5)); }
     async function requestWakeLock() { try { if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
     function releaseWakeLock() { if(wakeLock){ wakeLock.release(); wakeLock=null; } }
     function autoCorrelate(buf, sampleRate) {
