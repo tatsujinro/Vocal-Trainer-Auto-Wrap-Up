@@ -2,7 +2,7 @@ import urllib.request
 import os
 import ssl
 
-print("🚀 正在開始打包您的離線版聲樂教練 (v26.2 安全防護版)...")
+print("🚀 正在開始打包您的離線版聲樂教練 (v26.3 音準遊戲預判版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -36,7 +36,7 @@ html_template = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Daily Vocal Workout KTV</title>
+    <title>!!!On Pitch!!! Daily Vocal Workout</title>
     <style>
         :root { 
             --bg-color: #000000; 
@@ -131,9 +131,9 @@ html_template = """<!DOCTYPE html>
 <body>
 
     <div id="loadingMask" class="loading-mask">
-        <div style="font-size: 3rem; margin-bottom: 20px;">🎤</div>
-        <div>v26.2 安全防護版</div>
-        <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統相容性檢查中...</div>
+        <div style="font-size: 3rem; margin-bottom: 20px;">🎹</div>
+        <div>v26.3 音準預判版</div>
+        <div style="font-size: 0.8rem; color: #888; margin-top:10px;">預先載入視覺模組...</div>
         <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem;"></div>
     </div>
 
@@ -144,21 +144,21 @@ html_template = """<!DOCTYPE html>
     </div>
 
     <div id="controlsArea">
-        <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v26.2</span></h1>
+        <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v26.3</span></h1>
         
         <div class="control-group">
             <div class="tabs">
-                <button id="btn-triad" class="tab-btn active" onclick="switchConfigMode('triad')">大三和弦</button>
-                <button id="btn-scale5" class="tab-btn" onclick="switchConfigMode('scale5')">五度音階</button>
-                <button id="btn-octave" class="tab-btn" onclick="switchConfigMode('octave')">八度音程</button>
-                <button id="btn-p5" class="tab-btn" onclick="switchConfigMode('p5')">五度音程</button>
-                <button id="btn-p4" class="tab-btn" onclick="switchConfigMode('p4')">四度音程</button>
+                <button id="btn-triad" class="tab-btn active" onclick="switchConfigMode('triad')">大三和弦琶音練習</button>
+                <button id="btn-scale5" class="tab-btn" onclick="switchConfigMode('scale5')">五度音階琶音練習</button>
+                <button id="btn-octave" class="tab-btn" onclick="switchConfigMode('octave')">八度音程跳躍練習</button>
+                <button id="btn-p5" class="tab-btn" onclick="switchConfigMode('p5')">五度音程跳躍練習</button>
+                <button id="btn-p4" class="tab-btn" onclick="switchConfigMode('p4')">四度音程跳躍練習</button>
             </div>
             
             <div class="range-selectors">
-                <div class="range-col"><label>起始</label><select id="startNote"></select></div>
-                <div class="range-col"><label>頂點</label><select id="peakNote"></select></div>
-                <div class="range-col"><label>結束</label><select id="endNote"></select></div>
+                <div class="range-col"><label>起始組根音</label><select id="startNote"></select></div>
+                <div class="range-col"><label>頂點組根音</label><select id="peakNote"></select></div>
+                <div class="range-col"><label>結束組根音</label><select id="endNote"></select></div>
             </div>
             
             <button class="add-btn" onclick="addToRoutine()">⬇️ 加入課程清單</button>
@@ -250,13 +250,12 @@ html_template = """<!DOCTYPE html>
     let countInBeats = 4;
     let wakeLock = null;
 
-    // 錄音相關 (v26.2 安全旗標)
     let mediaRecorder = null;
     let audioChunks = [];
     let analyser = null;
     let microphoneStream = null;
     let audioBuffer = new Float32Array(2048);
-    let canRecord = true; // 預設為 true，檢測後可能變 false
+    let canRecord = true;
 
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     
@@ -273,7 +272,6 @@ html_template = """<!DOCTYPE html>
         window.addEventListener('resize', resizeCanvas);
         loadLocalStorage();
         
-        // v26.2: 檢查瀏覽器是否支援 MediaRecorder
         if (typeof MediaRecorder === 'undefined') {
             canRecord = false;
             document.getElementById('micWarning').style.display = 'block';
@@ -395,7 +393,6 @@ html_template = """<!DOCTYPE html>
     function removeItem(idx) { routineQueue.splice(idx, 1); renderRoutine(); saveLocalStorage(); }
     function clearRoutine() { routineQueue = []; renderRoutine(); saveLocalStorage(); }
 
-    // --- 音訊核心 (v26.2: 容錯機制) ---
     async function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -407,21 +404,19 @@ html_template = """<!DOCTYPE html>
             
             if (canRecord) {
                 try {
-                    // v26.2: 移除所有複雜的 constraints，使用最標準的請求
-                    // 這解決了 iOS 切換 app 才能跳通知的問題
                     console.log("Requesting standard microphone access...");
                     let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     
                     micSource = audioCtx.createMediaStreamSource(stream);
-                    micSource.connect(mixerNode); // 混音 (Piano + Mic) -> Recorder
+                    micSource.connect(mixerNode); 
                     
                     analyser = audioCtx.createAnalyser();
                     analyser.fftSize = 2048;
-                    micSource.connect(analyser); // Mic -> Analyser (Visualizer)
+                    micSource.connect(analyser); 
                     
                 } catch (e) {
                     console.warn("麥克風權限被拒絕或失敗", e);
-                    canRecord = false; // 降級為不錄音模式
+                    canRecord = false; 
                     document.getElementById('micWarning').innerText = "⚠️ 無法存取麥克風，將僅播放伴奏。";
                     document.getElementById('micWarning').style.display = 'block';
                 }
@@ -438,15 +433,12 @@ html_template = """<!DOCTYPE html>
         await initAudio();
         requestWakeLock();
 
-        // 啟動錄音機 (如果可用)
         if (canRecord && mixerNode && mixerNode.stream) {
             audioChunks = [];
             try {
-                // v26.2: 嚴格檢查 MIME Type
                 let options = {};
                 if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' };
                 else if (MediaRecorder.isTypeSupported('audio/webm')) options = { mimeType: 'audio/webm' };
-                // 如果都不支援，就不傳 options，讓瀏覽器自己決定
                 
                 mediaRecorder = new MediaRecorder(mixerNode.stream, options);
                 mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
@@ -454,7 +446,7 @@ html_template = """<!DOCTYPE html>
                 mediaRecorder.start();
             } catch(e) {
                 console.error("MediaRecorder init failed:", e);
-                canRecord = false; // 放棄錄音
+                canRecord = false; 
             }
         }
 
@@ -478,7 +470,7 @@ html_template = """<!DOCTYPE html>
         isPlaying = false;
         releaseWakeLock();
         if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-        else if (!canRecord) showResultModal(); // 如果沒錄音，手動觸發結算畫面
+        else if (!canRecord) showResultModal(); 
         
         clearTimeout(timerID);
         if (player) player.cancelQueue(audioCtx);
@@ -500,13 +492,19 @@ html_template = """<!DOCTYPE html>
         let now = audioCtx.currentTime;
         let playheadX = canvas.width * 0.2; 
         
+        // 渲染目標 (包含未來預判的音符)
         gameTargets.forEach(t => {
             let x = playheadX + (t.startTime - now) * PIXELS_PER_SEC;
             let width = t.duration * PIXELS_PER_SEC;
             let y = getYfromMidi(t.midi);
+            
+            // 優化繪圖效能，只畫螢幕看得到的
             if (x + width > 0 && x < canvas.width) {
+                // 視覺樣式
                 ctx.strokeStyle = "rgba(0, 229, 255, 0.8)";
+                ctx.fillStyle = "rgba(0, 229, 255, 0.1)";
                 ctx.lineWidth = 2;
+                ctx.fillRect(x, y - 15, width, 30); // 填色增強視覺
                 ctx.strokeRect(x, y - 15, width, 30);
             }
         });
@@ -528,7 +526,6 @@ html_template = """<!DOCTYPE html>
     }
 
     function detectAndDrawPitch(now, playheadX) {
-        // v26.2: 如果沒有 analyser (錄音失敗)，就不執行這段，防止當機
         if (!analyser) return;
 
         analyser.getFloatTimeDomainData(audioBuffer);
@@ -539,13 +536,10 @@ html_template = """<!DOCTYPE html>
 
         if (freq !== -1) {
             detectedMidi = 12 * (Math.log(freq / 440) / Math.log(2)) + 69;
-            let hit = false;
-            let diff = 100;
-            
             let currentTarget = gameTargets.find(t => now >= t.startTime && now <= t.startTime + t.duration);
             
             if (currentTarget) {
-                diff = Math.abs(detectedMidi - currentTarget.midi);
+                let diff = Math.abs(detectedMidi - currentTarget.midi);
                 if (diff < 0.15) { 
                     color = "#00e676"; score += 3; stats.perfect++;
                     document.getElementById('hudFeedback').innerText = "Perfect!";
@@ -605,6 +599,31 @@ html_template = """<!DOCTYPE html>
         viewCenterMidi = (startMidi + peakMidi) / 2;
     }
 
+    // --- v26.3 核心修改：預判函式 (Preview Pattern) ---
+    // 這個函式負責「提前計算」並把視覺格子塞進 gameTargets
+    function previewPatternVisuals(root, startTime, beatDur) {
+        let mode = routineQueue[currentRoutineIndex].mode;
+        let intervals = [];
+        if(mode==='triad') intervals=[0,4,7,4,0];
+        else if(mode==='scale5') intervals=[0,2,4,5,7,5,4,2,0];
+        else if(mode==='octave') intervals=[0,12,0];
+        else if(mode==='p5') intervals=[0,7,0];
+        else if(mode==='p4') intervals=[0,5,0];
+        
+        // 迴圈預先生成這個小節所有的格子
+        for(let i=0; i<intervals.length; i++) {
+            let noteTime = startTime + (i * beatDur);
+            let noteMidi = root + intervals[i];
+            
+            // 推入全域目標陣列 (這樣 renderLoop 就能提早畫出來了!)
+            gameTargets.push({ 
+                midi: noteMidi, 
+                startTime: noteTime, 
+                duration: beatDur * 0.95 // 留一點縫隙比較好看
+            });
+        }
+    }
+
     function startRoutineItem() {
         rootIndex = 0; patternStepIndex = 0;
         let config = routineQueue[currentRoutineIndex];
@@ -621,10 +640,14 @@ html_template = """<!DOCTYPE html>
             if(i === 0) {
                 let root = getMidiPitch(currentRoots[0]);
                 playChord(root, t, beatDur * 4);
+                // 預備拍的目標提示 (長條)
                 gameTargets.push({ midi: root, startTime: t, duration: beatDur * 4 });
             }
         }
         nextNoteTime += (countInBeats * beatDur);
+        
+        // v26.3: 在開始的第一個音，就立刻預判第一個小節的視覺
+        previewPatternVisuals(getMidiPitch(currentRoots[0]), nextNoteTime, beatDur);
     }
 
     function scheduler() {
@@ -644,13 +667,22 @@ html_template = """<!DOCTYPE html>
         let len = (mode==='triad')?4 : (mode==='scale5')?8 : (mode==='octave')?2 : (mode==='p5')?2 : 2;
         patternStepIndex++;
         
+        // 如果小節結束，換下一個根音
         if (patternStepIndex > len + 2) {
             patternStepIndex = 0;
             rootIndex++;
             if (rootIndex >= currentRoots.length) {
                 currentRoutineIndex++;
-                if (currentRoutineIndex < routineQueue.length) { nextNoteTime += 2.0; startRoutineItem(); }
+                if (currentRoutineIndex < routineQueue.length) { 
+                    nextNoteTime += 2.0; 
+                    startRoutineItem(); 
+                }
                 else { stop(); } 
+            } else {
+                // v26.3: 進入下一個小節 (Root)，立刻預判這小節的視覺
+                let nextRoot = getMidiPitch(currentRoots[rootIndex]);
+                // 下一個小節的開始時間就是現在累加到的 nextNoteTime
+                previewPatternVisuals(nextRoot, nextNoteTime, beatDur);
             }
         }
     }
@@ -672,8 +704,12 @@ html_template = """<!DOCTYPE html>
         if (step < intervals.length) {
             let note = root + intervals[step];
             let preset = _tone_0000_JCLive_sf2_file;
+            // 播放鋼琴
             player.queueWaveTable(audioCtx, masterGainNode, preset, time, note, beatDur*0.9, 1.0);
-            gameTargets.push({ midi: note, startTime: time, duration: beatDur * 0.95 });
+            
+            // v26.3: 這裡不再 push gameTargets 了！因為 previewPatternVisuals 已經幫忙做完了
+            // 我們只負責發聲
+            
             if(step===0) playChord(root, time, beatDur*intervals.length);
         }
         else {
@@ -752,10 +788,9 @@ html_template = """<!DOCTYPE html>
 final_html = html_template.replace("/*__INJECT_RESOURCES__*/", f"{player_code}\n{piano_code}")
 
 # 6. 寫入檔案
-# 每次更新版本，記得改這裡的檔名！很重要！
-output_filename = "VocalTrainer_Offline_v26.2.html"
+output_filename = "VocalTrainer_Offline_v26_3.html"
 with open(output_filename, "w", encoding="utf-8") as f:
     f.write(final_html)
 
 print(f"✅ 成功！已建立檔案: {output_filename}")
-print(f"👉 請上傳此檔案至 GitHub Pages。v26.2 權限修復版已就緒！")
+print(f"👉 v26.3 更新：現在每個小節的音符格子會提前生成，讓你像玩太鼓達人一樣看到未來 4-8 個音！")
