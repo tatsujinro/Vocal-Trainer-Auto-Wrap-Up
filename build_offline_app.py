@@ -752,7 +752,7 @@ html_template = """<!DOCTYPE html>
 final_html = html_template.replace("/*__INJECT_RESOURCES__*/", f"{player_code}\n{piano_code}")
 
 # 6. 寫入檔案
-# 每次更新版本，記得改這裡的檔名！
+# 每次更新版本，記得改這裡的檔名！很重要！
 output_filename = "VocalTrainer_Offline_v26.2.html"
 with open(output_filename, "w", encoding="utf-8") as f:
     f.write(final_html)
