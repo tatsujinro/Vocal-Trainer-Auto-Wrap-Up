@@ -2,7 +2,7 @@ import urllib.request
 import os
 import ssl
 
-print("🚀 正在開始打包您的離線版聲樂教練 (v27 混音台旗艦版)...")
+print("🚀 正在開始打包您的離線版聲樂教練 (v27.1 藍牙補償版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -36,7 +36,7 @@ html_template = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>吉他手聲樂教練 v27</title>
+    <title>Right On Pitch - Your Daily Vocal Workout v27.1</title>
     <style>
         :root { 
             --bg-color: #000000; 
@@ -49,7 +49,6 @@ html_template = """<!DOCTYPE html>
         }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; overflow: hidden; }
         
-        /* --- KTV 遊戲舞台 --- */
         #gameStage {
             position: relative; width: 100vw; height: 45vh; background: #111; 
             border-bottom: 2px solid #333; overflow: hidden;
@@ -63,7 +62,6 @@ html_template = """<!DOCTYPE html>
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%); font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
         }
 
-        /* --- 控制區 --- */
         #controlsArea {
             height: 55vh; overflow-y: auto; padding: 15px; box-sizing: border-box; background: var(--bg-color);
             transition: opacity 0.5s; padding-bottom: 80px;
@@ -73,15 +71,14 @@ html_template = """<!DOCTYPE html>
         h1 { color: var(--accent); margin: 0 0 10px 0; font-size: 1.2rem; }
         .control-group { background: var(--ui-bg); border-radius: 12px; padding: 12px; margin-bottom: 12px; border: 1px solid #333; }
 
-        /* --- v27 混音台 UI --- */
+        /* 混音台 */
         .mixer-container { display: flex; gap: 10px; margin-top: 5px; }
         .mixer-channel { flex: 1; background: #111; padding: 10px; border-radius: 8px; border: 1px solid #333; text-align: center; }
         .mixer-label { font-size: 0.8rem; color: #888; margin-bottom: 5px; }
-        .meter-box { width: 100%; height: 10px; background: #333; border-radius: 5px; margin-bottom: 8px; overflow: hidden; position: relative; }
+        .meter-box { width: 100%; height: 8px; background: #333; border-radius: 4px; margin-bottom: 8px; overflow: hidden; }
         .meter-fill { height: 100%; width: 0%; background: linear-gradient(to right, var(--meter-green) 60%, var(--meter-yellow) 80%, var(--meter-red) 100%); transition: width 0.05s linear; }
         .fader-wrapper input { width: 100%; }
         
-        /* 標籤按鈕 */
         .tabs { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
         .tab-btn { 
             background: transparent; color: #888; padding: 8px 5px; border: 1px solid #444; 
@@ -108,7 +105,6 @@ html_template = """<!DOCTYPE html>
         }
         .play-btn.stop { background: #ff5252; color: white; box-shadow: none; }
 
-        /* 結果視窗 */
         #resultModal {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95);
             z-index: 200; display: none; flex-direction: column; justify-content: center; align-items: center; text-align: center;
@@ -132,8 +128,8 @@ html_template = """<!DOCTYPE html>
 <body>
 
     <div id="loadingMask" class="loading-mask">
-        <div style="font-size: 3rem; margin-bottom: 20px;">🎛️</div>
-        <div>v27 混音台旗艦版</div>
+        <div style="font-size: 3rem; margin-bottom: 20px;">🎧</div>
+        <div>v27.1 藍牙補償版</div>
         <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化...</div>
         <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem;"></div>
     </div>
@@ -145,13 +141,13 @@ html_template = """<!DOCTYPE html>
     </div>
 
     <div id="controlsArea">
-        <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27</span></h1>
+        <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27.1</span></h1>
         
         <div class="control-group">
-            <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">🎛️ 錄音室混音台 (Recording Mixer)</div>
+            <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">🎛️ 錄音室混音台</div>
             <div class="mixer-container">
                 <div class="mixer-channel">
-                    <div class="mixer-label">🎹 伴奏錄製量</div>
+                    <div class="mixer-label">🎹 伴奏</div>
                     <div class="meter-box"><div class="meter-fill" id="meterPiano"></div></div>
                     <div class="fader-wrapper">
                         <input type="range" id="faderPianoRec" min="0" max="100" value="40">
@@ -159,7 +155,7 @@ html_template = """<!DOCTYPE html>
                     <div style="font-size:0.7rem; color:#666; margin-top:3px;">40%</div>
                 </div>
                 <div class="mixer-channel">
-                    <div class="mixer-label">🎤 人聲錄製量</div>
+                    <div class="mixer-label">🎤 人聲</div>
                     <div class="meter-box"><div class="meter-fill" id="meterVocal"></div></div>
                     <div class="fader-wrapper">
                         <input type="range" id="faderVocalRec" min="0" max="300" value="100">
@@ -167,6 +163,14 @@ html_template = """<!DOCTYPE html>
                     <div style="font-size:0.7rem; color:#666; margin-top:3px;">100%</div>
                 </div>
             </div>
+            
+            <div style="margin-top:15px; border-top:1px solid #333; padding-top:10px;">
+                <div style="font-size:0.8rem; color:var(--accent); margin-bottom:5px;">🎧 藍牙延遲補償 (Bluetooth Sync)</div>
+                <input type="range" id="latencySlider" min="0" max="500" value="0" step="10" style="width:100%">
+                <div style="font-size:0.7rem; color:#888; text-align:right;">延遲: <span id="latencyVal" style="color:white; font-weight:bold;">0</span> ms</div>
+                <div style="font-size:0.7rem; color:#666;">若回放時人聲比鋼琴慢，請增加此數值 (建議 100-300ms)。</div>
+            </div>
+
             <div id="micWarning" class="warning-msg">⚠️ 麥克風未啟用，人聲軌將無作用。</div>
         </div>
 
@@ -177,16 +181,16 @@ html_template = """<!DOCTYPE html>
 
         <div class="control-group">
             <div class="tabs">
-                <button id="btn-triad" class="tab-btn active" onclick="switchConfigMode('triad')">大三和弦</button>
-                <button id="btn-scale5" class="tab-btn" onclick="switchConfigMode('scale5')">五度音階</button>
-                <button id="btn-octave" class="tab-btn" onclick="switchConfigMode('octave')">八度音程</button>
-                <button id="btn-p5" class="tab-btn" onclick="switchConfigMode('p5')">五度音程</button>
-                <button id="btn-p4" class="tab-btn" onclick="switchConfigMode('p4')">四度音程</button>
+                <button id="btn-triad" class="tab-btn active" onclick="switchConfigMode('triad')">大三和弦琶音</button>
+                <button id="btn-scale5" class="tab-btn" onclick="switchConfigMode('scale5')">五度音階琶音</button>
+                <button id="btn-octave" class="tab-btn" onclick="switchConfigMode('octave')">八度音程跳躍</button>
+                <button id="btn-p5" class="tab-btn" onclick="switchConfigMode('p5')">五度音程跳躍</button>
+                <button id="btn-p4" class="tab-btn" onclick="switchConfigMode('p4')">四度音程跳躍</button>
             </div>
             <div class="range-selectors">
-                <div class="range-col"><label>起始</label><select id="startNote"></select></div>
-                <div class="range-col"><label>頂點</label><select id="peakNote"></select></div>
-                <div class="range-col"><label>結束</label><select id="endNote"></select></div>
+                <div class="range-col"><label>起始組根音</label><select id="startNote"></select></div>
+                <div class="range-col"><label>頂點組根音</label><select id="peakNote"></select></div>
+                <div class="range-col"><label>結束組根音</label><select id="endNote"></select></div>
             </div>
             <button class="add-btn" onclick="addToRoutine()">⬇️ 加入課程清單</button>
         </div>
@@ -204,7 +208,7 @@ html_template = """<!DOCTYPE html>
         </div>
     </div>
 
-    <button class="play-btn" id="playBtn" onclick="togglePlay()">▶ 開始特訓</button>
+    <button class="play-btn" id="playBtn" onclick="togglePlay()">▶ 開始特訓GO</button>
 
     <div id="resultModal">
         <h2 style="color:white; margin-bottom:10px;">練習完成!</h2>
@@ -232,17 +236,12 @@ html_template = """<!DOCTYPE html>
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     let audioCtx, player;
     
-    // --- v27: 雙軌混音節點 ---
-    let pianoSplitterNode; // 鋼琴訊號源
-    let monitorGainNode;   // 監聽 (喇叭)
-    let recPianoGainNode;  // 鋼琴 -> 錄音
-    let recVocalGainNode;  // 麥克風 -> 錄音
-    let mixerNode;         // 錄音總線
-    let micSource;         // 麥克風輸入
+    // 音訊節點
+    let pianoSplitterNode, monitorGainNode, recPianoGainNode, recVocalGainNode, mixerNode, micSource;
+    // v27.1: 鋼琴錄音延遲節點 (補償藍牙)
+    let pianoDelayNode; 
     
-    // Metering
     let pianoAnalyser, vocalAnalyser;
-    
     let isPlaying = false;
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
@@ -252,9 +251,11 @@ html_template = """<!DOCTYPE html>
     let score = 0;
     let stats = { perfect:0, good:0, miss:0, totalFrames:0 };
     
+    // v27.1: 視覺參數優化
     const PIXELS_PER_SEC = 100;
     const PIXELS_PER_SEMITONE = 15;
     const VISUAL_OFFSET_SEC = 0.15; 
+    const BLOCK_HEIGHT = 30; // 目標方格高度
     let viewCenterMidi = 60; 
 
     let nextNoteTime = 0.0, timerID, lookahead = 25.0, scheduleAheadTime = 0.1;
@@ -272,11 +273,11 @@ html_template = """<!DOCTYPE html>
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     
     let rangeProfiles = {
-        'triad':  { s:'A3', p:'C#4', e:'A2', name:'大三和弦' },
-        'scale5': { s:'A3', p:'G4',  e:'A2', name:'五度音階' },
-        'octave': { s:'C3', p:'G4',  e:'C3', name:'八度音程' },
-        'p5':     { s:'C3', p:'G4',  e:'C3', name:'五度音程' },
-        'p4':     { s:'C3', p:'G4',  e:'C3', name:'四度音程' }
+        'triad':  { s:'A3', p:'C#4', e:'A2', name:'大三和弦琶音' },
+        'scale5': { s:'A3', p:'G4',  e:'A2', name:'五度音階琶音' },
+        'octave': { s:'C3', p:'G4',  e:'C3', name:'八度音程跳躍' },
+        'p5':     { s:'C3', p:'G4',  e:'C3', name:'五度音程跳躍' },
+        'p4':     { s:'C3', p:'G4',  e:'C3', name:'四度音程跳躍' }
     };
 
     window.onload = function() {
@@ -303,7 +304,6 @@ html_template = """<!DOCTYPE html>
         canvas.height = document.getElementById('gameStage').clientHeight;
     }
 
-    // --- 記憶功能 (包含音量設定) ---
     function saveLocalStorage() {
         const data = { 
             profiles: rangeProfiles, 
@@ -311,24 +311,27 @@ html_template = """<!DOCTYPE html>
             bpm: document.getElementById('bpm').value,
             volMonitor: document.getElementById('volMonitor').value,
             recPiano: document.getElementById('faderPianoRec').value,
-            recVocal: document.getElementById('faderVocalRec').value
+            recVocal: document.getElementById('faderVocalRec').value,
+            latency: document.getElementById('latencySlider').value // 儲存延遲設定
         };
-        localStorage.setItem('v27_data', JSON.stringify(data));
+        localStorage.setItem('v27_1_data', JSON.stringify(data));
     }
 
     function loadLocalStorage() {
-        const raw = localStorage.getItem('v27_data');
+        const raw = localStorage.getItem('v27_1_data');
         if (raw) {
             try {
                 const data = JSON.parse(raw);
                 if(data.profiles) rangeProfiles = data.profiles;
                 if(data.routine) routineQueue = data.routine;
                 if(data.bpm) document.getElementById('bpm').value = data.bpm;
-                
-                // 載入音量
                 if(data.volMonitor) document.getElementById('volMonitor').value = data.volMonitor;
                 if(data.recPiano) document.getElementById('faderPianoRec').value = data.recPiano;
                 if(data.recVocal) document.getElementById('faderVocalRec').value = data.recVocal;
+                if(data.latency) {
+                    document.getElementById('latencySlider').value = data.latency;
+                    document.getElementById('latencyVal').innerText = data.latency;
+                }
                 
                 renderRoutine();
                 document.getElementById('bpmVal').innerText = document.getElementById('bpm').value;
@@ -353,50 +356,51 @@ html_template = """<!DOCTYPE html>
     }
 
     function initUIListeners() {
-        // 監聽音量
         document.getElementById('volMonitor').addEventListener('input', function(e) {
             document.getElementById('volMonitorVal').innerText = e.target.value + "%";
-            updateGains();
-            saveLocalStorage();
+            updateGains(); saveLocalStorage();
         });
-        // 混音台推桿
         document.getElementById('faderPianoRec').addEventListener('input', function(e) {
             e.target.parentNode.nextElementSibling.innerText = e.target.value + "%";
-            updateGains();
-            saveLocalStorage();
+            updateGains(); saveLocalStorage();
         });
         document.getElementById('faderVocalRec').addEventListener('input', function(e) {
             e.target.parentNode.nextElementSibling.innerText = e.target.value + "%";
-            updateGains();
-            saveLocalStorage();
+            updateGains(); saveLocalStorage();
         });
         
+        // v27.1: 延遲滑桿監聽
+        document.getElementById('latencySlider').addEventListener('input', function(e) {
+            document.getElementById('latencyVal').innerText = e.target.value;
+            updateGains(); // 更新延遲時間
+            saveLocalStorage();
+        });
+
         document.getElementById('bpm').addEventListener('input', function(e) { 
             document.getElementById('bpmVal').innerText = e.target.value; 
             saveLocalStorage();
         });
-        
         ['startNote', 'peakNote', 'endNote'].forEach(id => {
             document.getElementById(id).addEventListener('change', function() { saveCurrentProfile(); });
         });
     }
 
-    // --- v27: 更新所有增益節點 ---
     function updateGains() {
         if (!audioCtx) return;
         let now = audioCtx.currentTime;
         
-        // 1. 監聽音量 (Slider)
         let volMon = document.getElementById('volMonitor').value / 100.0;
         if(monitorGainNode) monitorGainNode.gain.setTargetAtTime(volMon, now, 0.05);
         
-        // 2. 錄音鋼琴 (Fader)
         let volPianoRec = document.getElementById('faderPianoRec').value / 100.0;
         if(recPianoGainNode) recPianoGainNode.gain.setTargetAtTime(volPianoRec, now, 0.05);
         
-        // 3. 錄音人聲 (Fader)
         let volVocalRec = document.getElementById('faderVocalRec').value / 100.0;
         if(recVocalGainNode) recVocalGainNode.gain.setTargetAtTime(volVocalRec, now, 0.05);
+
+        // v27.1: 更新延遲時間
+        let latencyMs = parseFloat(document.getElementById('latencySlider').value);
+        if(pianoDelayNode) pianoDelayNode.delayTime.setTargetAtTime(latencyMs / 1000.0, now, 0.05);
     }
 
     function switchConfigMode(mode) {
@@ -427,8 +431,7 @@ html_template = """<!DOCTYPE html>
         saveCurrentProfile();
         let p = rangeProfiles[editingMode];
         routineQueue.push({ mode: editingMode, s: p.s, p: p.p, e: p.e, name: p.name });
-        renderRoutine();
-        saveLocalStorage();
+        renderRoutine(); saveLocalStorage();
     }
 
     function renderRoutine() {
@@ -446,31 +449,31 @@ html_template = """<!DOCTYPE html>
     function removeItem(idx) { routineQueue.splice(idx, 1); renderRoutine(); saveLocalStorage(); }
     function clearRoutine() { routineQueue = []; renderRoutine(); saveLocalStorage(); }
 
-    // --- 音訊架構核心 (v27 Y型分流) ---
     async function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // 總線與分析器
             mixerNode = audioCtx.createMediaStreamDestination();
             pianoAnalyser = audioCtx.createAnalyser(); pianoAnalyser.fftSize = 256;
-            vocalAnalyser = audioCtx.createAnalyser(); vocalAnalyser.fftSize = 256; // 這裡作為 Meter 用
+            vocalAnalyser = audioCtx.createAnalyser(); vocalAnalyser.fftSize = 256;
             
-            // 建立鋼琴源頭 (Splitter)
             pianoSplitterNode = audioCtx.createGain();
             
-            // 路徑 A: 監聽 (Piano -> MonitorGain -> Speaker)
+            // A. 監聽路徑 (Piano -> Monitor -> Speaker)
             monitorGainNode = audioCtx.createGain();
             pianoSplitterNode.connect(monitorGainNode);
             monitorGainNode.connect(audioCtx.destination);
             
-            // 路徑 B: 錄音鋼琴 (Piano -> RecPianoGain -> Mixer)
+            // B. 錄音鋼琴路徑 (Piano -> Delay -> RecGain -> Mixer)
+            // v27.1: 加入 DelayNode 
+            pianoDelayNode = audioCtx.createDelay(1.0); // 最大 1 秒
             recPianoGainNode = audioCtx.createGain();
-            pianoSplitterNode.connect(recPianoGainNode);
-            recPianoGainNode.connect(mixerNode);
-            recPianoGainNode.connect(pianoAnalyser); // 用於電平表
             
-            // 路徑 C & D: 麥克風 (Mic -> RecVocalGain -> Mixer)
+            pianoSplitterNode.connect(pianoDelayNode);
+            pianoDelayNode.connect(recPianoGainNode);
+            recPianoGainNode.connect(mixerNode);
+            recPianoGainNode.connect(pianoAnalyser); 
+            
+            // C. 麥克風路徑
             if (canRecord) {
                 try {
                     let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -479,11 +482,10 @@ html_template = """<!DOCTYPE html>
                     recVocalGainNode = audioCtx.createGain();
                     micSource.connect(recVocalGainNode);
                     recVocalGainNode.connect(mixerNode);
-                    recVocalGainNode.connect(vocalAnalyser); // 用於電平表與音準分析
+                    recVocalGainNode.connect(vocalAnalyser); 
                     
                 } catch (e) {
-                    console.warn(e);
-                    canRecord = false; 
+                    console.warn(e); canRecord = false; 
                     document.getElementById('micWarning').style.display = 'block';
                 }
             }
@@ -505,7 +507,6 @@ html_template = """<!DOCTYPE html>
                 let options = {};
                 if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' };
                 else if (MediaRecorder.isTypeSupported('audio/webm')) options = { mimeType: 'audio/webm' };
-                
                 mediaRecorder = new MediaRecorder(mixerNode.stream, options);
                 mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
                 mediaRecorder.onstop = showResultModal; 
@@ -540,16 +541,14 @@ html_template = """<!DOCTYPE html>
         cancelAnimationFrame(gameLoopId);
         
         document.getElementById('controlsArea').classList.remove('immersive-hidden');
-        document.getElementById('playBtn').innerText = "▶ 開始特訓";
+        document.getElementById('playBtn').innerText = "▶ 開始特訓Go";
         document.getElementById('playBtn').classList.remove('stop');
         renderRoutine();
     }
 
-    // --- Render Loop (含電平表更新) ---
     function renderLoop() {
         if (!isPlaying) return;
         
-        // 1. 遊戲畫面
         ctx.fillStyle = "#111";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         drawGrid();
@@ -566,17 +565,14 @@ html_template = """<!DOCTYPE html>
                 ctx.strokeStyle = "rgba(0, 229, 255, 0.8)";
                 ctx.fillStyle = "rgba(0, 229, 255, 0.1)";
                 ctx.lineWidth = 2;
-                ctx.fillRect(x, y - 20, width, 40); // 視覺寬度加粗
-                ctx.strokeRect(x, y - 20, width, 40);
+                ctx.fillRect(x, y - BLOCK_HEIGHT/2, width, BLOCK_HEIGHT);
+                ctx.strokeRect(x, y - BLOCK_HEIGHT/2, width, BLOCK_HEIGHT);
             }
         });
         
         detectAndDrawPitch(now, playheadX);
         document.getElementById('hudScore').innerText = score.toString().padStart(4, '0');
-        
-        // 2. 更新混音台電平 (Meter)
         updateMeters();
-
         gameLoopId = requestAnimationFrame(renderLoop);
     }
 
@@ -585,15 +581,13 @@ html_template = """<!DOCTYPE html>
             let arr = new Uint8Array(pianoAnalyser.frequencyBinCount);
             pianoAnalyser.getByteFrequencyData(arr);
             let avg = arr.reduce((a,b)=>a+b,0) / arr.length;
-            let percent = Math.min(100, avg * 1.5); // 稍微放大
-            document.getElementById('meterPiano').style.width = percent + "%";
+            document.getElementById('meterPiano').style.width = Math.min(100, avg * 1.5) + "%";
         }
         if(vocalAnalyser) {
             let arr = new Uint8Array(vocalAnalyser.frequencyBinCount);
             vocalAnalyser.getByteFrequencyData(arr);
             let avg = arr.reduce((a,b)=>a+b,0) / arr.length;
-            let percent = Math.min(100, avg * 2.0);
-            document.getElementById('meterVocal').style.width = percent + "%";
+            document.getElementById('meterVocal').style.width = Math.min(100, avg * 2.0) + "%";
         }
     }
 
@@ -609,53 +603,48 @@ html_template = """<!DOCTYPE html>
     }
 
     function detectAndDrawPitch(now, playheadX) {
-        if (!vocalAnalyser) return; // 使用 vocalAnalyser 進行音準分析
+        if (!vocalAnalyser) return; 
 
         vocalAnalyser.getFloatTimeDomainData(audioBuffer);
         let freq = autoCorrelate(audioBuffer, audioCtx.sampleRate);
-        
         let color = "rgba(255, 255, 255, 0.1)"; 
         let detectedMidi = null;
 
         if (freq !== -1) {
-            detectedMidi = 12 * (Math.log(freq / 440) / Math.log(2)) + 69;
+            let rawMidi = 12 * (Math.log(freq / 440) / Math.log(2)) + 69;
             
-            // v27: 音準平滑化 (Simple Moving Average)
-            if(userPitchHistory.length > 0 && userPitchHistory[userPitchHistory.length-1].midi) {
-                let prev = userPitchHistory[userPitchHistory.length-1].midi;
-                detectedMidi = prev * 0.5 + detectedMidi * 0.5; // 簡單加權平均
+            // v27.1: 平滑化 (加權平均, 視窗擴大)
+            // 如果上一個點存在，做加權平均
+            if (userPitchHistory.length > 0) {
+                // 這裡做一個簡單的 IIR Filter (Infinite Impulse Response) 效果
+                // 越高的係數代表越滑順，但反應越慢
+                let prev = userPitchHistory[userPitchHistory.length - 1].midi;
+                if (prev) {
+                    detectedMidi = prev * 0.8 + rawMidi * 0.2; // 80% 舊值, 20% 新值 (高度平滑)
+                } else {
+                    detectedMidi = rawMidi;
+                }
+            } else {
+                detectedMidi = rawMidi;
             }
 
             let currentTarget = gameTargets.find(t => now >= t.startTime && now <= t.startTime + t.duration);
-            
             if (currentTarget) {
                 let diff = Math.abs(detectedMidi - currentTarget.midi);
-                if (diff < 0.15) { 
-                    color = "#00e676"; score += 3; stats.perfect++;
-                    document.getElementById('hudFeedback').innerText = "Perfect!";
-                    document.getElementById('hudFeedback').style.color = color;
-                } else if (diff < 0.5) { 
-                    color = "#ffea00"; score += 1; stats.good++;
-                    document.getElementById('hudFeedback').innerText = "Good";
-                    document.getElementById('hudFeedback').style.color = color;
-                } else {
-                    color = "#ff5252"; stats.miss++;
-                    let txt = (detectedMidi > currentTarget.midi) ? "High ⬆" : "Low ⬇";
-                    document.getElementById('hudFeedback').innerText = txt;
-                    document.getElementById('hudFeedback').style.color = color;
-                }
-            } else {
-                color = "#aaa"; document.getElementById('hudFeedback').innerText = "";
-            }
+                if (diff < 0.15) { color = "#00e676"; score += 3; stats.perfect++; document.getElementById('hudFeedback').innerText = "Perfect!"; document.getElementById('hudFeedback').style.color = color; } 
+                else if (diff < 0.5) { color = "#ffea00"; score += 1; stats.good++; document.getElementById('hudFeedback').innerText = "Good"; document.getElementById('hudFeedback').style.color = color; } 
+                else { color = "#ff5252"; stats.miss++; let txt = (detectedMidi > currentTarget.midi) ? "High ⬆" : "Low ⬇"; document.getElementById('hudFeedback').innerText = txt; document.getElementById('hudFeedback').style.color = color; }
+            } else { color = "#aaa"; document.getElementById('hudFeedback').innerText = ""; }
             stats.totalFrames++;
         }
 
         userPitchHistory.push({ time: now + VISUAL_OFFSET_SEC, midi: detectedMidi, color: color });
+        // v27.1: 保留更多歷史點以供平滑運算 (雖然視覺只畫一部分)
         while(userPitchHistory.length > 0 && userPitchHistory[0].time < now - 1.0) { userPitchHistory.shift(); }
 
         if (userPitchHistory.length > 1) {
-            // v27: 畫筆加粗
-            ctx.lineWidth = 6; 
+            // v27.1: 視覺寬度設定為 2/3 (Block Height 30 * 2/3 = 20)
+            ctx.lineWidth = 20; 
             ctx.lineCap = "round";
             ctx.lineJoin = "round";
             
@@ -686,12 +675,12 @@ html_template = """<!DOCTYPE html>
         else currentRoots.push(config.s);
         globalPeakIndex = currentRoots.length - 1;
         if (eIdx < pIdx && eIdx >= 0) for(let i=pIdx-1; i>=eIdx; i--) currentRoots.push(allOpts[i]);
-        
         let startMidi = getMidiPitch(config.s);
         let peakMidi = getMidiPitch(config.p);
         viewCenterMidi = (startMidi + peakMidi) / 2;
     }
 
+    // v27.1: 預判視覺
     function previewPatternVisuals(root, startTime, beatDur) {
         let mode = routineQueue[currentRoutineIndex].mode;
         let intervals = [];
@@ -729,13 +718,14 @@ html_template = """<!DOCTYPE html>
         }
         nextNoteTime += (countInBeats * beatDur);
         
-        // v27: 預判未來 2 小節 (Extended Lookahead)
+        // v27.1: 預判 2 個 Pattern (N+1, N+2)
         let root1 = getMidiPitch(currentRoots[0]);
         previewPatternVisuals(root1, nextNoteTime, beatDur);
         
         if (currentRoots.length > 1) {
             let root2 = getMidiPitch(currentRoots[1]);
-            let len = (routineQueue[currentRoutineIndex].mode==='scale5') ? 9 : 5; // 概略長度
+            let len = (routineQueue[currentRoutineIndex].mode==='scale5') ? 9 : 5; 
+            // 修正計算：確保時間點準確
             previewPatternVisuals(root2, nextNoteTime + (len+2)*beatDur, beatDur);
         }
     }
@@ -765,10 +755,13 @@ html_template = """<!DOCTYPE html>
                 if (currentRoutineIndex < routineQueue.length) { nextNoteTime += 2.0; startRoutineItem(); }
                 else { stop(); } 
             } else {
-                // Lookahead update (for continuous flow)
-                let futureIndex = rootIndex + 2;
+                // v27.1: 持續預判下下個 Pattern (保持 2 個緩衝)
+                let futureIndex = rootIndex + 2; 
                 if(futureIndex < currentRoots.length) {
                     let nextRoot = getMidiPitch(currentRoots[futureIndex]);
+                    // 時間推算：當前時間 + (當前Pattern長度) + (下一個Pattern長度)
+                    // 這裡簡化計算，直接基於 nextNoteTime 往後推
+                    // 但因為 nextStep 是每一拍呼叫，所以這個預判只在 Pattern 切換瞬間執行一次
                     previewPatternVisuals(nextRoot, nextNoteTime + (len+2)*beatDur*2, beatDur);
                 }
             }
@@ -781,7 +774,6 @@ html_template = """<!DOCTYPE html>
         let bpm = document.getElementById('bpm').value;
         let beatDur = 60.0 / bpm;
         let mode = routineQueue[currentRoutineIndex].mode;
-        
         let intervals = [];
         if(mode==='triad') intervals=[0,4,7,4,0];
         else if(mode==='scale5') intervals=[0,2,4,5,7,5,4,2,0];
@@ -789,10 +781,10 @@ html_template = """<!DOCTYPE html>
         else if(mode==='p5') intervals=[0,7,0];
         else if(mode==='p4') intervals=[0,5,0];
 
-        // v27: 這裡的 player 要連接到 pianoSplitterNode!
         if (step < intervals.length) {
             let note = root + intervals[step];
             let preset = _tone_0000_JCLive_sf2_file;
+            // 連接到 pianoSplitter
             player.queueWaveTable(audioCtx, pianoSplitterNode, preset, time, note, beatDur*0.9, 1.0);
             if(step===0) playChord(root, time, beatDur*intervals.length);
         }
@@ -839,7 +831,6 @@ html_template = """<!DOCTYPE html>
         g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5, t+0.001); g.gain.exponentialRampToValueAtTime(0.001, t+0.08);
         osc.connect(g); g.connect(audioCtx.destination); osc.start(t); osc.stop(t+0.1);
     }
-    // v27: 和弦也要走 split channel
     function playChord(root, t, dur) {
         let preset = _tone_0000_JCLive_sf2_file;
         [0,4,7].forEach(s => player.queueWaveTable(audioCtx, pianoSplitterNode, preset, t, root+s, dur, 0.5));
@@ -870,9 +861,9 @@ html_template = """<!DOCTYPE html>
 final_html = html_template.replace("/*__INJECT_RESOURCES__*/", f"{player_code}\n{piano_code}")
 
 # 6. 寫入檔案
-output_filename = "VocalTrainer_Offline_v27.html"
+output_filename = "VocalTrainer_Offline_v27_1.html"
 with open(output_filename, "w", encoding="utf-8") as f:
     f.write(final_html)
 
 print(f"✅ 成功！已建立檔案: {output_filename}")
-print(f"👉 v27 更新：新增「錄音室混音台」UI，並實作了 Y 型分流架構，解決了回授與手機 Ducking 問題。")
+print(f"👉 v27.1：新增藍牙延遲補償滑桿、視覺加粗、音準平滑化與多重預判。")
