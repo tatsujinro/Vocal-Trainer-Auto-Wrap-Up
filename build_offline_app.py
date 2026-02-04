@@ -3,10 +3,10 @@ import os
 import ssl
 
 # 設定版本號
-VERSION = "v28_4"
+VERSION = "v28_5"
 FILENAME = f"VocalTrainer_Offline_{VERSION}.html"
 
-print(f"🚀 正在開始打包 {VERSION} (緊急修復版)...")
+print(f"🚀 正在開始打包 {VERSION} (獨立架構+安全模式版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -87,8 +87,8 @@ CSS_PART = """
 HTML_PART = """
 <div id="loadingMask" class="loading-mask">
     <div style="font-size: 3rem; margin-bottom: 20px;">🎧</div>
-    <div>v28.4 緊急修復版</div>
-    <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化... (訊號重建中)</div>
+    <div>v28.5 獨立架構安全版</div>
+    <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化... (Safe Mode)</div>
     <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem;"></div>
 </div>
 
@@ -99,13 +99,13 @@ HTML_PART = """
 </div>
 
 <div id="controlsArea">
-    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v28.4</span></h1>
+    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v28.5</span></h1>
     
     <div class="control-group">
-        <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">📊 訊號狀態 (Input Gain: 50%)</div>
+        <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">📊 訊號狀態 (Safety: On)</div>
         <div class="mixer-container">
             <div class="mixer-channel">
-                <div class="mixer-label">人聲輸入 (僅偵測)</div>
+                <div class="mixer-label">人聲 (Filter: 1kHz)</div>
                 <div class="meter-box"><div class="meter-fill" id="meterVocal"></div></div>
             </div>
             <div class="mixer-channel">
@@ -113,7 +113,7 @@ HTML_PART = """
                 <div class="meter-box"><div class="meter-fill" id="meterPiano"></div></div>
             </div>
         </div>
-        <div id="micWarning" class="warning-msg">⚠️ 麥克風未啟用，無法進行音準判定。</div>
+        <div id="micWarning" class="warning-msg">⚠️ 麥克風初始化失敗，但遊戲仍可進行。</div>
     </div>
 
     <div class="control-group">
@@ -168,7 +168,9 @@ JS_PART = """
 <script>
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     let audioCtx, player;
-    let pianoSplitterNode, monitorGainNode, micSource; 
+    
+    // v28.5: 獨立定義所有節點，避免依賴鏈
+    let pianoGainNode, micSource; 
     let pianoAnalyser, vocalAnalyser;
     let lowPassFilterNode, inputGainNode;
     
@@ -203,8 +205,8 @@ JS_PART = """
 
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     
-    // v28.4: 確保 FFT_SIZE 足夠大 (2048) 以偵測低頻
-    const FFT_SIZE = 2048; 
+    // Global Memory Pools
+    const FFT_SIZE = 2048; // 保留 2048 以捕捉低頻
     const BUF_SIZE = 2048;
     let audioDataBuffer = new Float32Array(BUF_SIZE); 
     let meterBuffer = new Uint8Array(FFT_SIZE);       
@@ -241,11 +243,11 @@ JS_PART = """
             profiles: rangeProfiles, routine: routineQueue, bpm: document.getElementById('bpm').value,
             volMonitor: document.getElementById('volMonitor').value
         };
-        localStorage.setItem('v28_4_data', JSON.stringify(data));
+        localStorage.setItem('v28_5_data', JSON.stringify(data));
     }
 
     function loadLocalStorage() {
-        const raw = localStorage.getItem('v28_4_data');
+        const raw = localStorage.getItem('v28_5_data');
         if (raw) {
             try {
                 const data = JSON.parse(raw);
@@ -286,7 +288,8 @@ JS_PART = """
         if (!audioCtx) return;
         let now = audioCtx.currentTime;
         let volMon = document.getElementById('volMonitor').value / 100.0;
-        if(monitorGainNode) monitorGainNode.gain.setTargetAtTime(volMon, now, 0.05);
+        // v28.5: 使用 pianoGainNode
+        if(pianoGainNode) pianoGainNode.gain.setTargetAtTime(volMon, now, 0.05);
     }
 
     function switchConfigMode(mode) { saveCurrentProfile(); editingMode = mode; document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); document.getElementById('btn-' + mode).classList.add('active'); applyProfile(mode); }
@@ -309,24 +312,20 @@ JS_PART = """
     async function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // --- 1. 優先建立鋼琴/遊戲系統 (保證不依賴麥克風) ---
             pianoAnalyser = audioCtx.createAnalyser(); 
-            pianoAnalyser.fftSize = 256; // 鋼琴只需要視覺，解析度低沒關係
+            pianoAnalyser.fftSize = 256; 
             
+            pianoGainNode = audioCtx.createGain();
+            pianoGainNode.connect(audioCtx.destination);
+            pianoGainNode.connect(pianoAnalyser); // 讓鋼琴有視覺與聲音
+            
+            // --- 2. 建立人聲分析器 (但先不接輸入) ---
             vocalAnalyser = audioCtx.createAnalyser(); 
-            // v28.4: 關鍵修正! 設為 2048 才能解析低頻人聲
-            vocalAnalyser.fftSize = 2048; 
+            vocalAnalyser.fftSize = 2048; // 高解析度
             
-            // v28.4: 重建鋼琴分流器 (Splitter)
-            pianoSplitterNode = audioCtx.createGain();
-            monitorGainNode = audioCtx.createGain();
-            
-            // 連接: Splitter -> Monitor -> Speaker
-            pianoSplitterNode.connect(monitorGainNode);
-            monitorGainNode.connect(audioCtx.destination);
-            
-            // 連接: Splitter -> Analyser (Visuals)
-            pianoSplitterNode.connect(pianoAnalyser);
-            
+            // --- 3. 嘗試接通麥克風 ---
             if (canRecord) {
                 try {
                     let constraints = {
@@ -341,23 +340,22 @@ JS_PART = """
                     let stream = await navigator.mediaDevices.getUserMedia(constraints);
                     micSource = audioCtx.createMediaStreamSource(stream);
                     
-                    // --- 簡化且強健的人聲鏈路 (Robust Vocal Chain) ---
-                    // 1. 前級衰減 (Input Gain 0.5) - 解決 Clipping
+                    // 建立訊號鏈
                     inputGainNode = audioCtx.createGain();
-                    inputGainNode.gain.value = 0.5;
+                    inputGainNode.gain.value = 0.5; // Pre-Gain 50%
                     
-                    // 2. 低通濾波 (Low-Pass 1000Hz) - 解決高頻雜訊
                     lowPassFilterNode = audioCtx.createBiquadFilter();
                     lowPassFilterNode.type = "lowpass";
                     lowPassFilterNode.frequency.value = 1000;
                     
-                    // 連接: Mic -> Gain -> Filter -> Analyser
+                    // 串接：Mic -> Gain -> Filter -> Analyser
                     micSource.connect(inputGainNode);
                     inputGainNode.connect(lowPassFilterNode);
                     lowPassFilterNode.connect(vocalAnalyser);
                     
                 } catch (e) {
                     console.warn(e);
+                    // 即使失敗，也不要讓程式崩潰，只顯示警告
                     canRecord = false; document.getElementById('micWarning').style.display = 'block';
                 }
             }
@@ -369,15 +367,32 @@ JS_PART = """
     async function togglePlay() {
         if (isPlaying) { stop(); return; }
         if (routineQueue.length === 0) { alert("請加入課程！"); return; }
-        await initAudio(); requestWakeLock();
         
-        score = 0; stats = { perfect:0, good:0, miss:0, totalFrames:0 };
-        gameTargets = []; userPitchHistory = []; pitchSmoothingBuffer = [];
-        currentRoutineIndex = 0; isPlaying = true;
-        document.getElementById('controlsArea').classList.add('immersive-hidden');
-        document.getElementById('playBtn').innerText = "⏹ 停止";
-        document.getElementById('playBtn').classList.add('stop');
-        startRoutineItem(); scheduler(); renderLoop(); 
+        try {
+            await initAudio(); 
+            requestWakeLock();
+            
+            score = 0; stats = { perfect:0, good:0, miss:0, totalFrames:0 };
+            gameTargets = []; userPitchHistory = []; pitchSmoothingBuffer = [];
+            currentRoutineIndex = 0; isPlaying = true;
+            document.getElementById('controlsArea').classList.add('immersive-hidden');
+            document.getElementById('playBtn').innerText = "⏹ 停止";
+            document.getElementById('playBtn').classList.add('stop');
+            
+            // 這裡必須確保 Audio Context 是跑動的，不然 Scheduler 不會動
+            if (audioCtx && audioCtx.state === 'running') {
+                startRoutineItem(); 
+                scheduler(); 
+                renderLoop();
+            } else {
+                alert("音訊系統啟動失敗，請點擊頁面再試一次。");
+                stop();
+            }
+        } catch(e) {
+            console.error(e);
+            alert("系統錯誤：" + e);
+            stop();
+        }
     }
 
     function stop() {
@@ -492,6 +507,7 @@ JS_PART = """
         }
     }
 
+    // v28.5 UI Fix: 強制重置介面狀態
     function closeResult() { 
         document.getElementById('resultModal').style.display = 'none'; 
         document.getElementById('controlsArea').classList.remove('immersive-hidden');
@@ -502,8 +518,8 @@ JS_PART = """
     function getYfromMidi(midi) { return (canvas.height / 2) - (midi - viewCenterMidi) * PIXELS_PER_SEMITONE; }
     function getMidiPitch(n) { let note = n.slice(0, -1), oct = parseInt(n.slice(-1)); return notes.indexOf(note) + (oct + 1) * 12; }
     function playStickClick(t) { let osc = audioCtx.createOscillator(); let g = audioCtx.createGain(); osc.frequency.setValueAtTime(1200, t); osc.frequency.exponentialRampToValueAtTime(800, t+0.05); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5, t+0.001); g.gain.exponentialRampToValueAtTime(0.001, t+0.08); osc.connect(g); g.connect(audioCtx.destination); osc.start(t); osc.stop(t+0.1); }
-    // v28.4: 確保使用 pianoSplitterNode 作為輸入，才能同時發聲+視覺
-    function playChord(root, t, dur) { let preset = _tone_0000_JCLive_sf2_file; [0,4,7].forEach(s => player.queueWaveTable(audioCtx, pianoSplitterNode, preset, t, root+s, dur, 0.5)); }
+    // v28.5: 使用統一的 pianoGainNode
+    function playChord(root, t, dur) { let preset = _tone_0000_JCLive_sf2_file; [0,4,7].forEach(s => player.queueWaveTable(audioCtx, pianoGainNode, preset, t, root+s, dur, 0.5)); }
     async function requestWakeLock() { try { if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
     function releaseWakeLock() { if(wakeLock){ wakeLock.release(); wakeLock=null; } }
     function autoCorrelate(buf, sampleRate) {
