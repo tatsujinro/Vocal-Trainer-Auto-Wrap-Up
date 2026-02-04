@@ -36,7 +36,7 @@ html_template = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Right On Pitch - Your Daily Vocal Workout v27.1</title>
+    <title>Right On Pitch - Your Daily Vocal Workout</title>
     <style>
         :root { 
             --bg-color: #000000; 
