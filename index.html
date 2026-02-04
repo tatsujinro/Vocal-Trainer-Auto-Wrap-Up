@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>吉他手聲樂教練 v28_5</title>
+<title>吉他手聲樂教練 v27_6</title>
 
 <style>
     :root { --bg-color: #000000; --ui-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #00e5ff; --meter-green: #00e676; --meter-yellow: #ffea00; --meter-red: #ff5252; }
@@ -42,6 +42,7 @@
     .stat-item { text-align: center; }
     .stat-val { font-size: 1.2rem; font-weight: bold; }
     .stat-label { font-size: 0.8rem; color: #888; }
+    .audio-player { width: 90%; margin-bottom: 20px; }
     .modal-btn { padding: 10px 30px; border-radius: 20px; border: 1px solid #fff; background: transparent; color: white; font-size: 1rem; cursor: pointer; }
     .loading-mask { position: fixed; top:0; left:0; width:100%; height:100%; background: #000; z-index: 999; display: flex; justify-content: center; align-items: center; color: white; flex-direction: column; }
     .warning-msg { color: #ff5252; font-size: 0.8rem; margin-top: 5px; display: none; }
@@ -52,8 +53,8 @@
 
 <div id="loadingMask" class="loading-mask">
     <div style="font-size: 3rem; margin-bottom: 20px;">🎧</div>
-    <div>v28.5 獨立架構安全版</div>
-    <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化... (Safe Mode)</div>
+    <div>v27.6 性能優化+濾波淨化版</div>
+    <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化...</div>
     <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem;"></div>
 </div>
 
@@ -64,21 +65,32 @@
 </div>
 
 <div id="controlsArea">
-    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v28.5</span></h1>
+    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27.6</span></h1>
     
     <div class="control-group">
-        <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">📊 訊號狀態 (Safety: On)</div>
+        <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">🎛️ 錄音室混音台</div>
         <div class="mixer-container">
             <div class="mixer-channel">
-                <div class="mixer-label">人聲 (Filter: 1kHz)</div>
-                <div class="meter-box"><div class="meter-fill" id="meterVocal"></div></div>
+                <div class="mixer-label">🎹 伴奏</div>
+                <div class="meter-box"><div class="meter-fill" id="meterPiano"></div></div>
+                <div class="fader-wrapper"><input type="range" id="faderPianoRec" min="0" max="100" value="40"></div>
+                <div style="font-size:0.7rem; color:#666; margin-top:3px;">40%</div>
             </div>
             <div class="mixer-channel">
-                <div class="mixer-label">鋼琴音量</div>
-                <div class="meter-box"><div class="meter-fill" id="meterPiano"></div></div>
+                <div class="mixer-label">🎤 人聲</div>
+                <div class="meter-box"><div class="meter-fill" id="meterVocal"></div></div>
+                <div class="fader-wrapper"><input type="range" id="faderVocalRec" min="0" max="300" value="100"></div>
+                <div style="font-size:0.7rem; color:#666; margin-top:3px;">100%</div>
             </div>
         </div>
-        <div id="micWarning" class="warning-msg">⚠️ 麥克風初始化失敗，但遊戲仍可進行。</div>
+        
+        <div style="margin-top:15px; border-top:1px solid #333; padding-top:10px;">
+            <div style="font-size:0.8rem; color:var(--accent); margin-bottom:5px;">🎧 藍牙延遲補償 (Bluetooth Sync)</div>
+            <input type="range" id="latencySlider" min="0" max="500" value="0" step="10" style="width:100%">
+            <div style="font-size:0.7rem; color:#888; text-align:right;">延遲: <span id="latencyVal" style="color:white; font-weight:bold;">0</span> ms</div>
+            <div style="font-size:0.7rem; color:#666;">若回放時人聲比鋼琴慢，請增加此數值。</div>
+        </div>
+        <div id="micWarning" class="warning-msg">⚠️ 麥克風未啟用，人聲軌將無作用。</div>
     </div>
 
     <div class="control-group">
@@ -123,7 +135,13 @@
         <div class="stat-item"><div class="stat-val" style="color:var(--meter-yellow)" id="statGood">0%</div><div class="stat-label">Good</div></div>
         <div class="stat-item"><div class="stat-val" style="color:var(--meter-red)" id="statMiss">0%</div><div class="stat-label">Miss</div></div>
     </div>
-    <div style="color:#888; font-size:0.8rem; margin-bottom:20px;">(本次練習為純粹模式，無錄音存檔)</div>
+    <div id="audioPlayerWrapper">
+        <audio id="resultAudio" class="audio-player" controls></audio>
+        <div style="display:flex; gap:10px; justify-content:center;">
+            <a id="downloadLink" class="modal-btn" style="border-color:var(--accent); color:var(--accent);">下載錄音</a>
+        </div>
+    </div>
+    <div id="noRecMsg" style="display:none; color:#888; margin-bottom:20px;">(本次練習未啟用錄音功能)</div>
     <button class="modal-btn" onclick="closeResult()" style="margin-top:10px;">關閉</button>
 </div>
 
@@ -1662,11 +1680,11 @@ var _tone_0000_JCLive_sf2_file={
 <script>
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     let audioCtx, player;
-    
-    // v28.5: 獨立定義所有節點，避免依賴鏈
-    let pianoGainNode, micSource; 
+    let pianoSplitterNode, monitorGainNode, recPianoGainNode, recVocalGainNode, mixerNode, micSource, pianoDelayNode; 
     let pianoAnalyser, vocalAnalyser;
-    let lowPassFilterNode, inputGainNode;
+    
+    // v27.6: 低通濾波器節點
+    let lowPassFilterNode;
     
     let isPlaying = false;
     const canvas = document.getElementById('gameCanvas');
@@ -1676,8 +1694,9 @@ var _tone_0000_JCLive_sf2_file={
     let userPitchHistory = [];
     let pitchSmoothingBuffer = []; 
     
+    // v27.6: 性能優化 - 分析限流
     let lastAnalysisTime = 0;
-    const ANALYSIS_INTERVAL = 0.05; 
+    const ANALYSIS_INTERVAL = 0.05; // 50ms (每秒 20 次，大幅降低 CPU 負擔)
     
     let score = 0;
     let stats = { perfect:0, good:0, miss:0, totalFrames:0 };
@@ -1695,15 +1714,11 @@ var _tone_0000_JCLive_sf2_file={
     let currentRoutineIndex = 0;
     let countInBeats = 4;
     let wakeLock = null;
-    let canRecord = true; 
+
+    let mediaRecorder = null, audioChunks = [], audioBuffer = new Float32Array(2048);
+    let canRecord = true;
 
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    
-    // Global Memory Pools
-    const FFT_SIZE = 2048; // 保留 2048 以捕捉低頻
-    const BUF_SIZE = 2048;
-    let audioDataBuffer = new Float32Array(BUF_SIZE); 
-    let meterBuffer = new Uint8Array(FFT_SIZE);       
     
     let rangeProfiles = {
         'triad':  { s:'A3', p:'C#4', e:'A2', name:'大三和弦' },
@@ -1717,6 +1732,7 @@ var _tone_0000_JCLive_sf2_file={
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
         loadLocalStorage();
+        if (typeof MediaRecorder === 'undefined') { canRecord = false; document.getElementById('micWarning').style.display = 'block'; }
         setTimeout(() => {
             try {
                 if (typeof WebAudioFontPlayer === 'undefined') throw new Error("引擎載入失敗");
@@ -1735,13 +1751,16 @@ var _tone_0000_JCLive_sf2_file={
     function saveLocalStorage() {
         const data = { 
             profiles: rangeProfiles, routine: routineQueue, bpm: document.getElementById('bpm').value,
-            volMonitor: document.getElementById('volMonitor').value
+            volMonitor: document.getElementById('volMonitor').value,
+            recPiano: document.getElementById('faderPianoRec').value,
+            recVocal: document.getElementById('faderVocalRec').value,
+            latency: document.getElementById('latencySlider').value
         };
-        localStorage.setItem('v28_5_data', JSON.stringify(data));
+        localStorage.setItem('v27_6_data', JSON.stringify(data));
     }
 
     function loadLocalStorage() {
-        const raw = localStorage.getItem('v28_5_data');
+        const raw = localStorage.getItem('v27_6_data');
         if (raw) {
             try {
                 const data = JSON.parse(raw);
@@ -1749,7 +1768,12 @@ var _tone_0000_JCLive_sf2_file={
                 if(data.routine) routineQueue = data.routine;
                 if(data.bpm) document.getElementById('bpm').value = data.bpm;
                 if(data.volMonitor) document.getElementById('volMonitor').value = data.volMonitor;
-                
+                if(data.recPiano) document.getElementById('faderPianoRec').value = data.recPiano;
+                if(data.recVocal) document.getElementById('faderVocalRec').value = data.recVocal;
+                if(data.latency) {
+                    document.getElementById('latencySlider').value = data.latency;
+                    document.getElementById('latencyVal').innerText = data.latency;
+                }
                 renderRoutine();
                 document.getElementById('bpmVal').innerText = document.getElementById('bpm').value;
                 document.getElementById('volMonitorVal').innerText = document.getElementById('volMonitor').value + "%";
@@ -1774,6 +1798,9 @@ var _tone_0000_JCLive_sf2_file={
 
     function initUIListeners() {
         document.getElementById('volMonitor').addEventListener('input', function(e) { document.getElementById('volMonitorVal').innerText = e.target.value + "%"; updateGains(); saveLocalStorage(); });
+        document.getElementById('faderPianoRec').addEventListener('input', function(e) { e.target.parentNode.nextElementSibling.innerText = e.target.value + "%"; updateGains(); saveLocalStorage(); });
+        document.getElementById('faderVocalRec').addEventListener('input', function(e) { e.target.parentNode.nextElementSibling.innerText = e.target.value + "%"; updateGains(); saveLocalStorage(); });
+        document.getElementById('latencySlider').addEventListener('input', function(e) { document.getElementById('latencyVal').innerText = e.target.value; updateGains(); saveLocalStorage(); });
         document.getElementById('bpm').addEventListener('input', function(e) { document.getElementById('bpmVal').innerText = e.target.value; saveLocalStorage(); });
         ['startNote', 'peakNote', 'endNote'].forEach(id => { document.getElementById(id).addEventListener('change', function() { saveCurrentProfile(); }); });
     }
@@ -1782,8 +1809,13 @@ var _tone_0000_JCLive_sf2_file={
         if (!audioCtx) return;
         let now = audioCtx.currentTime;
         let volMon = document.getElementById('volMonitor').value / 100.0;
-        // v28.5: 使用 pianoGainNode
-        if(pianoGainNode) pianoGainNode.gain.setTargetAtTime(volMon, now, 0.05);
+        if(monitorGainNode) monitorGainNode.gain.setTargetAtTime(volMon, now, 0.05);
+        let volPianoRec = document.getElementById('faderPianoRec').value / 100.0;
+        if(recPianoGainNode) recPianoGainNode.gain.setTargetAtTime(volPianoRec, now, 0.05);
+        let volVocalRec = document.getElementById('faderVocalRec').value / 100.0;
+        if(recVocalGainNode) recVocalGainNode.gain.setTargetAtTime(volVocalRec, now, 0.05);
+        let latencyMs = parseFloat(document.getElementById('latencySlider').value);
+        if(pianoDelayNode) pianoDelayNode.delayTime.setTargetAtTime(latencyMs / 1000.0, now, 0.05);
     }
 
     function switchConfigMode(mode) { saveCurrentProfile(); editingMode = mode; document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); document.getElementById('btn-' + mode).classList.add('active'); applyProfile(mode); }
@@ -1806,50 +1838,49 @@ var _tone_0000_JCLive_sf2_file={
     async function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            mixerNode = audioCtx.createMediaStreamDestination();
+            pianoAnalyser = audioCtx.createAnalyser(); pianoAnalyser.fftSize = 256;
+            vocalAnalyser = audioCtx.createAnalyser(); vocalAnalyser.fftSize = 256;
+            pianoSplitterNode = audioCtx.createGain();
             
-            // --- 1. 優先建立鋼琴/遊戲系統 (保證不依賴麥克風) ---
-            pianoAnalyser = audioCtx.createAnalyser(); 
-            pianoAnalyser.fftSize = 256; 
+            monitorGainNode = audioCtx.createGain();
+            pianoSplitterNode.connect(monitorGainNode);
+            monitorGainNode.connect(audioCtx.destination);
             
-            pianoGainNode = audioCtx.createGain();
-            pianoGainNode.connect(audioCtx.destination);
-            pianoGainNode.connect(pianoAnalyser); // 讓鋼琴有視覺與聲音
+            pianoDelayNode = audioCtx.createDelay(1.0);
+            recPianoGainNode = audioCtx.createGain();
+            pianoSplitterNode.connect(pianoDelayNode);
+            pianoDelayNode.connect(recPianoGainNode);
+            recPianoGainNode.connect(mixerNode);
+            recPianoGainNode.connect(pianoAnalyser); 
             
-            // --- 2. 建立人聲分析器 (但先不接輸入) ---
-            vocalAnalyser = audioCtx.createAnalyser(); 
-            vocalAnalyser.fftSize = 2048; // 高解析度
-            
-            // --- 3. 嘗試接通麥克風 ---
             if (canRecord) {
                 try {
                     let constraints = {
                         audio: {
-                            echoCancellation: false,
-                            noiseSuppression: false,
-                            autoGainControl: false,
-                            latency: 0
+                            echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0
                         }
                     };
-                    
                     let stream = await navigator.mediaDevices.getUserMedia(constraints);
                     micSource = audioCtx.createMediaStreamSource(stream);
                     
-                    // 建立訊號鏈
-                    inputGainNode = audioCtx.createGain();
-                    inputGainNode.gain.value = 0.5; // Pre-Gain 50%
-                    
+                    // --- v27.6: 加入 Low-Pass Filter (低通濾波) ---
+                    // 只讓 1000Hz 以下的聲音通過，過濾高頻雜訊與泛音
                     lowPassFilterNode = audioCtx.createBiquadFilter();
                     lowPassFilterNode.type = "lowpass";
                     lowPassFilterNode.frequency.value = 1000;
                     
-                    // 串接：Mic -> Gain -> Filter -> Analyser
-                    micSource.connect(inputGainNode);
-                    inputGainNode.connect(lowPassFilterNode);
+                    // 偵測路徑: Mic -> Filter -> Analyser
+                    micSource.connect(lowPassFilterNode);
                     lowPassFilterNode.connect(vocalAnalyser);
                     
+                    // 錄音路徑: Mic -> Gain -> Mixer (保持原音，不過濾)
+                    recVocalGainNode = audioCtx.createGain();
+                    recVocalGainNode.gain.value = 1.0; 
+                    micSource.connect(recVocalGainNode);
+                    recVocalGainNode.connect(mixerNode);
+                    
                 } catch (e) {
-                    console.warn(e);
-                    // 即使失敗，也不要讓程式崩潰，只顯示警告
                     canRecord = false; document.getElementById('micWarning').style.display = 'block';
                 }
             }
@@ -1861,37 +1892,32 @@ var _tone_0000_JCLive_sf2_file={
     async function togglePlay() {
         if (isPlaying) { stop(); return; }
         if (routineQueue.length === 0) { alert("請加入課程！"); return; }
-        
-        try {
-            await initAudio(); 
-            requestWakeLock();
-            
-            score = 0; stats = { perfect:0, good:0, miss:0, totalFrames:0 };
-            gameTargets = []; userPitchHistory = []; pitchSmoothingBuffer = [];
-            currentRoutineIndex = 0; isPlaying = true;
-            document.getElementById('controlsArea').classList.add('immersive-hidden');
-            document.getElementById('playBtn').innerText = "⏹ 停止";
-            document.getElementById('playBtn').classList.add('stop');
-            
-            // 這裡必須確保 Audio Context 是跑動的，不然 Scheduler 不會動
-            if (audioCtx && audioCtx.state === 'running') {
-                startRoutineItem(); 
-                scheduler(); 
-                renderLoop();
-            } else {
-                alert("音訊系統啟動失敗，請點擊頁面再試一次。");
-                stop();
-            }
-        } catch(e) {
-            console.error(e);
-            alert("系統錯誤：" + e);
-            stop();
+        await initAudio(); requestWakeLock();
+        if (canRecord && mixerNode && mixerNode.stream) {
+            audioChunks = [];
+            try {
+                let options = {};
+                if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' };
+                else if (MediaRecorder.isTypeSupported('audio/webm')) options = { mimeType: 'audio/webm' };
+                mediaRecorder = new MediaRecorder(mixerNode.stream, options);
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+                mediaRecorder.onstop = showResultModal; 
+                mediaRecorder.start();
+            } catch(e) { canRecord = false; }
         }
+        score = 0; stats = { perfect:0, good:0, miss:0, totalFrames:0 };
+        gameTargets = []; userPitchHistory = []; pitchSmoothingBuffer = [];
+        currentRoutineIndex = 0; isPlaying = true;
+        document.getElementById('controlsArea').classList.add('immersive-hidden');
+        document.getElementById('playBtn').innerText = "⏹ 停止";
+        document.getElementById('playBtn').classList.add('stop');
+        startRoutineItem(); scheduler(); renderLoop(); 
     }
 
     function stop() {
         isPlaying = false; releaseWakeLock();
-        showResultModal();
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+        else if (!canRecord) showResultModal();
         clearTimeout(timerID); if (player) player.cancelQueue(audioCtx); cancelAnimationFrame(gameLoopId);
         document.getElementById('controlsArea').classList.remove('immersive-hidden');
         document.getElementById('playBtn').innerText = "▶ 開始特訓";
@@ -1920,13 +1946,13 @@ var _tone_0000_JCLive_sf2_file={
 
     function updateMeters() {
         if(pianoAnalyser) {
-            pianoAnalyser.getByteFrequencyData(meterBuffer);
-            let avg = meterBuffer.reduce((a,b)=>a+b,0) / meterBuffer.length;
+            let arr = new Uint8Array(pianoAnalyser.frequencyBinCount); pianoAnalyser.getByteFrequencyData(arr);
+            let avg = arr.reduce((a,b)=>a+b,0) / arr.length;
             document.getElementById('meterPiano').style.width = Math.min(100, avg * 1.5) + "%";
         }
         if(vocalAnalyser) {
-            vocalAnalyser.getByteFrequencyData(meterBuffer);
-            let avg = meterBuffer.reduce((a,b)=>a+b,0) / meterBuffer.length;
+            let arr = new Uint8Array(vocalAnalyser.frequencyBinCount); vocalAnalyser.getByteFrequencyData(arr);
+            let avg = arr.reduce((a,b)=>a+b,0) / arr.length;
             document.getElementById('meterVocal').style.width = Math.min(100, avg * 2.0) + "%";
         }
     }
@@ -1938,26 +1964,30 @@ var _tone_0000_JCLive_sf2_file={
     }
 
     function detectAndDrawPitch(now, playheadX) {
+        // v27.6: 限流閥 (Throttle) - 確保每 50ms (20fps) 才執行一次繁重的音準運算
         if (now - lastAnalysisTime < ANALYSIS_INTERVAL) {
+            // 如果還沒到時間，直接使用「上一次計算的結果」來畫圖 (維持視覺流暢)，但不做數學運算
             drawPitchHistory(now, playheadX);
             return;
         }
         lastAnalysisTime = now;
 
         if (!vocalAnalyser) return;
+        vocalAnalyser.getFloatTimeDomainData(audioBuffer);
         
-        vocalAnalyser.getFloatTimeDomainData(audioDataBuffer);
-        
+        // v27.6: 噪音閘門 (Noise Gate) - 計算 RMS 音量
         let rms = 0;
-        for (let i = 0; i < audioDataBuffer.length; i++) rms += audioDataBuffer[i] * audioDataBuffer[i];
-        rms = Math.sqrt(rms / audioDataBuffer.length);
+        for (let i = 0; i < audioBuffer.length; i++) rms += audioBuffer[i] * audioBuffer[i];
+        rms = Math.sqrt(rms / audioBuffer.length);
         
-        if (rms < 0.01) { 
+        if (rms < 0.01) { // 如果音量太小，視為噪音，不分析
+             // 維持緩衝區但不加入新值，或者清空
+             // 這裡選擇不做動作，讓線條斷開
              drawPitchHistory(now, playheadX);
              return; 
         }
 
-        let freq = autoCorrelate(audioDataBuffer, audioCtx.sampleRate);
+        let freq = autoCorrelate(audioBuffer, audioCtx.sampleRate);
         let color = "rgba(255, 255, 255, 0.1)"; 
         let detectedMidi = null;
 
@@ -2001,19 +2031,29 @@ var _tone_0000_JCLive_sf2_file={
         }
     }
 
-    // v28.5 UI Fix: 強制重置介面狀態
-    function closeResult() { 
-        document.getElementById('resultModal').style.display = 'none'; 
-        document.getElementById('controlsArea').classList.remove('immersive-hidden');
-        document.getElementById('playBtn').innerText = "▶ 開始特訓";
-        document.getElementById('playBtn').classList.remove('stop');
+    function showResultModal() {
+        let modal = document.getElementById('resultModal'); modal.style.display = 'flex';
+        document.getElementById('finalScore').innerText = score;
+        let total = stats.totalFrames || 1;
+        document.getElementById('statPerfect').innerText = Math.round((stats.perfect/total)*100) + "%";
+        document.getElementById('statGood').innerText = Math.round((stats.good/total)*100) + "%";
+        document.getElementById('statMiss').innerText = Math.round((stats.miss/total)*100) + "%";
+        if (canRecord && audioChunks.length > 0) {
+            let blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+            let url = URL.createObjectURL(blob);
+            document.getElementById('resultAudio').src = url;
+            document.getElementById('downloadLink').href = url;
+            document.getElementById('downloadLink').download = `vocal_score_${score}.mp4`;
+            document.getElementById('audioPlayerWrapper').style.display = 'block'; document.getElementById('noRecMsg').style.display = 'none';
+        } else {
+            document.getElementById('audioPlayerWrapper').style.display = 'none'; document.getElementById('noRecMsg').style.display = 'block';
+        }
     }
-
+    function closeResult() { document.getElementById('resultModal').style.display = 'none'; }
     function getYfromMidi(midi) { return (canvas.height / 2) - (midi - viewCenterMidi) * PIXELS_PER_SEMITONE; }
     function getMidiPitch(n) { let note = n.slice(0, -1), oct = parseInt(n.slice(-1)); return notes.indexOf(note) + (oct + 1) * 12; }
     function playStickClick(t) { let osc = audioCtx.createOscillator(); let g = audioCtx.createGain(); osc.frequency.setValueAtTime(1200, t); osc.frequency.exponentialRampToValueAtTime(800, t+0.05); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5, t+0.001); g.gain.exponentialRampToValueAtTime(0.001, t+0.08); osc.connect(g); g.connect(audioCtx.destination); osc.start(t); osc.stop(t+0.1); }
-    // v28.5: 使用統一的 pianoGainNode
-    function playChord(root, t, dur) { let preset = _tone_0000_JCLive_sf2_file; [0,4,7].forEach(s => player.queueWaveTable(audioCtx, pianoGainNode, preset, t, root+s, dur, 0.5)); }
+    function playChord(root, t, dur) { let preset = _tone_0000_JCLive_sf2_file; [0,4,7].forEach(s => player.queueWaveTable(audioCtx, pianoSplitterNode, preset, t, root+s, dur, 0.5)); }
     async function requestWakeLock() { try { if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
     function releaseWakeLock() { if(wakeLock){ wakeLock.release(); wakeLock=null; } }
     function autoCorrelate(buf, sampleRate) {

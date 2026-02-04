@@ -53,7 +53,7 @@
 
 <div id="loadingMask" class="loading-mask">
     <div style="font-size: 3rem; margin-bottom: 20px;">🎧</div>
-    <div>v27.6 效能與畫質雙重優化版</div>
+    <div>v27.6 性能優化+濾波淨化版</div>
     <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化...</div>
     <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem;"></div>
 </div>
@@ -1694,9 +1694,9 @@ var _tone_0000_JCLive_sf2_file={
     let userPitchHistory = [];
     let pitchSmoothingBuffer = []; 
     
-    // v27.6: 性能優化 - 分析限流 (每 50ms 更新一次 = 20FPS)
+    // v27.6: 性能優化 - 分析限流
     let lastAnalysisTime = 0;
-    const ANALYSIS_INTERVAL = 0.05; 
+    const ANALYSIS_INTERVAL = 0.05; // 50ms (每秒 20 次，大幅降低 CPU 負擔)
     
     let score = 0;
     let stats = { perfect:0, good:0, miss:0, totalFrames:0 };
@@ -1856,16 +1856,11 @@ var _tone_0000_JCLive_sf2_file={
             
             if (canRecord) {
                 try {
-                    // v27.6: 保持 "Recording Studio" 模式 (關閉降噪)
                     let constraints = {
                         audio: {
-                            echoCancellation: false,
-                            noiseSuppression: false,
-                            autoGainControl: false,
-                            latency: 0
+                            echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0
                         }
                     };
-                    
                     let stream = await navigator.mediaDevices.getUserMedia(constraints);
                     micSource = audioCtx.createMediaStreamSource(stream);
                     
@@ -1886,7 +1881,6 @@ var _tone_0000_JCLive_sf2_file={
                     recVocalGainNode.connect(mixerNode);
                     
                 } catch (e) {
-                    console.warn(e);
                     canRecord = false; document.getElementById('micWarning').style.display = 'block';
                 }
             }
@@ -2037,98 +2031,6 @@ var _tone_0000_JCLive_sf2_file={
         }
     }
 
-    function getYfromMidi(midi) { return (canvas.height / 2) - (midi - viewCenterMidi) * PIXELS_PER_SEMITONE; }
-    
-    function generateRootsFromConfig(config) {
-        let allOpts = []; for(let oct=2; oct<=5; oct++) notes.forEach(n => allOpts.push(`${n}${oct}`));
-        let sIdx = allOpts.indexOf(config.s), pIdx = allOpts.indexOf(config.p), eIdx = allOpts.indexOf(config.e);
-        currentRoots = [];
-        if (sIdx <= pIdx) for(let i=sIdx; i<=pIdx; i++) currentRoots.push(allOpts[i]); else currentRoots.push(config.s);
-        globalPeakIndex = currentRoots.length - 1;
-        if (eIdx < pIdx && eIdx >= 0) for(let i=pIdx-1; i>=eIdx; i--) currentRoots.push(allOpts[i]);
-        viewCenterMidi = (getMidiPitch(config.s) + getMidiPitch(config.p)) / 2;
-    }
-
-    function previewPatternVisuals(root, startTime, beatDur) {
-        let mode = routineQueue[currentRoutineIndex].mode;
-        let intervals = (mode==='triad')?[0,4,7,4,0] : (mode==='scale5')?[0,2,4,5,7,5,4,2,0] : (mode==='octave')?[0,12,0] : (mode==='p5')?[0,7,0] : [0,5,0];
-        for(let i=0; i<intervals.length; i++) {
-            gameTargets.push({ midi: root + intervals[i], startTime: startTime + (i * beatDur), duration: beatDur * 0.95 });
-        }
-    }
-
-    function startRoutineItem() {
-        rootIndex = 0; patternStepIndex = 0;
-        let config = routineQueue[currentRoutineIndex]; generateRootsFromConfig(config); renderRoutine();
-        let bpm = document.getElementById('bpm').value; let beatDur = 60.0 / bpm;
-        let now = audioCtx.currentTime; if (nextNoteTime < now) nextNoteTime = now + 0.5;
-        for(let i=0; i<countInBeats; i++) {
-            let t = nextNoteTime + (i * beatDur); playStickClick(t);
-            if(i === 0) {
-                let root = getMidiPitch(currentRoots[0]); playChord(root, t, beatDur * 4);
-                gameTargets.push({ midi: root, startTime: t, duration: beatDur * 4 });
-            }
-        }
-        nextNoteTime += (countInBeats * beatDur);
-        
-        let root1 = getMidiPitch(currentRoots[0]); 
-        previewPatternVisuals(root1, nextNoteTime, beatDur);
-        if (currentRoots.length > 1) {
-            let root2 = getMidiPitch(currentRoots[1]);
-            let len = (routineQueue[currentRoutineIndex].mode==='scale5') ? 9 : (routineQueue[currentRoutineIndex].mode==='triad') ? 5 : 3; 
-            previewPatternVisuals(root2, nextNoteTime + (len+2)*beatDur, beatDur);
-            if (currentRoots.length > 2) {
-                 let root3 = getMidiPitch(currentRoots[2]);
-                 previewPatternVisuals(root3, nextNoteTime + (len+2)*beatDur*2, beatDur);
-            }
-        }
-    }
-
-    function scheduler() {
-        while (isPlaying && nextNoteTime < audioCtx.currentTime + scheduleAheadTime) { scheduleNote(rootIndex, patternStepIndex, nextNoteTime); nextStep(); }
-        if (isPlaying) timerID = window.setTimeout(scheduler, lookahead);
-    }
-
-    function nextStep() {
-        let bpm = document.getElementById('bpm').value; let beatDur = 60.0 / bpm;
-        nextNoteTime += beatDur;
-        let mode = routineQueue[currentRoutineIndex].mode;
-        let len = (mode==='triad')?4 : (mode==='scale5')?8 : 2; // intervals.length - 1
-        patternStepIndex++;
-        if (patternStepIndex > len + 2) {
-            patternStepIndex = 0; rootIndex++;
-            if (rootIndex >= currentRoots.length) {
-                currentRoutineIndex++;
-                if (currentRoutineIndex < routineQueue.length) { nextNoteTime += 2.0; startRoutineItem(); } else { stop(); }
-            } else {
-                let futureIndex = rootIndex + 2; 
-                if(futureIndex < currentRoots.length) {
-                    let nextRoot = getMidiPitch(currentRoots[futureIndex]);
-                    let pLen = (mode==='scale5') ? 9 : (mode==='triad') ? 5 : 3; 
-                    previewPatternVisuals(nextRoot, nextNoteTime + (pLen+2)*beatDur*2, beatDur);
-                }
-            }
-        }
-    }
-
-    function scheduleNote(idx, step, time) {
-        if(idx >= currentRoots.length) return;
-        let root = getMidiPitch(currentRoots[idx]); let bpm = document.getElementById('bpm').value; let beatDur = 60.0 / bpm;
-        let mode = routineQueue[currentRoutineIndex].mode;
-        let intervals = (mode==='triad')?[0,4,7,4,0] : (mode==='scale5')?[0,2,4,5,7,5,4,2,0] : (mode==='octave')?[0,12,0] : (mode==='p5')?[0,7,0] : [0,5,0];
-        if (step < intervals.length) {
-            let note = root + intervals[step]; let preset = _tone_0000_JCLive_sf2_file;
-            player.queueWaveTable(audioCtx, pianoSplitterNode, preset, time, note, beatDur*0.9, 1.0);
-            if(step===0) playChord(root, time, beatDur*intervals.length);
-        } else {
-            if(step === intervals.length) playChord(root, time, beatDur);
-            else if(step === intervals.length + 1) {
-                let nextRoot = (idx+1 < currentRoots.length) ? getMidiPitch(currentRoots[idx+1]) : root;
-                playChord(nextRoot, time, beatDur);
-            }
-        }
-    }
-
     function showResultModal() {
         let modal = document.getElementById('resultModal'); modal.style.display = 'flex';
         document.getElementById('finalScore').innerText = score;
@@ -2148,6 +2050,7 @@ var _tone_0000_JCLive_sf2_file={
         }
     }
     function closeResult() { document.getElementById('resultModal').style.display = 'none'; }
+    function getYfromMidi(midi) { return (canvas.height / 2) - (midi - viewCenterMidi) * PIXELS_PER_SEMITONE; }
     function getMidiPitch(n) { let note = n.slice(0, -1), oct = parseInt(n.slice(-1)); return notes.indexOf(note) + (oct + 1) * 12; }
     function playStickClick(t) { let osc = audioCtx.createOscillator(); let g = audioCtx.createGain(); osc.frequency.setValueAtTime(1200, t); osc.frequency.exponentialRampToValueAtTime(800, t+0.05); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5, t+0.001); g.gain.exponentialRampToValueAtTime(0.001, t+0.08); osc.connect(g); g.connect(audioCtx.destination); osc.start(t); osc.stop(t+0.1); }
     function playChord(root, t, dur) { let preset = _tone_0000_JCLive_sf2_file; [0,4,7].forEach(s => player.queueWaveTable(audioCtx, pianoSplitterNode, preset, t, root+s, dur, 0.5)); }
