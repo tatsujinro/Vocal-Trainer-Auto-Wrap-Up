@@ -2,7 +2,11 @@ import urllib.request
 import os
 import ssl
 
-print("🚀 正在開始打包 v27.2 (邏輯修復版)...")
+# 設定版本號 (請確保這裡跟你的預期一致)
+VERSION = "v27_2"
+FILENAME = f"VocalTrainer_Offline_{VERSION}.html"
+
+print(f"🚀 正在開始打包 {VERSION} (分段寫入模式)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -11,7 +15,7 @@ ssl_context = ssl._create_unverified_context()
 PLAYER_URL = "https://surikov.github.io/webaudiofont/npm/dist/WebAudioFontPlayer.js"
 PIANO_URL = "https://surikov.github.io/webaudiofontdata/sound/0000_JCLive_sf2_file.js"
 
-# 3. 下載資源
+# 3. 下載資源 (這部分最容易超時，所以先做)
 try:
     print("📥 [1/4] 下載播放引擎...")
     with urllib.request.urlopen(PLAYER_URL, context=ssl_context) as response:
@@ -31,60 +35,62 @@ except Exception as e:
     exit(1)
 
 # ---------------------------------------------------------
-# 4. 定義各個區塊
+# 4. 定義內容區塊
 # ---------------------------------------------------------
 
-# Part A: CSS
-css_part = """
-<style>
-    :root { --bg-color: #000000; --ui-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #00e5ff; --meter-green: #00e676; --meter-yellow: #ffea00; --meter-red: #ff5252; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; overflow: hidden; }
-    #gameStage { position: relative; width: 100vw; height: 45vh; background: #111; border-bottom: 2px solid #333; overflow: hidden; }
-    canvas { display: block; width: 100%; height: 100%; }
-    .hud-score { position: absolute; top: 15px; right: 15px; font-size: 1.5rem; font-weight: bold; color: white; text-shadow: 0 0 10px var(--accent); font-family: monospace; }
-    .hud-feedback { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
-    #controlsArea { height: 55vh; overflow-y: auto; padding: 15px; box-sizing: border-box; background: var(--bg-color); transition: opacity 0.5s; padding-bottom: 80px; }
-    #controlsArea.immersive-hidden { opacity: 0.1; pointer-events: none; }
-    h1 { color: var(--accent); margin: 0 0 10px 0; font-size: 1.2rem; }
-    .control-group { background: var(--ui-bg); border-radius: 12px; padding: 12px; margin-bottom: 12px; border: 1px solid #333; }
-    .mixer-container { display: flex; gap: 10px; margin-top: 5px; }
-    .mixer-channel { flex: 1; background: #111; padding: 10px; border-radius: 8px; border: 1px solid #333; text-align: center; }
-    .mixer-label { font-size: 0.8rem; color: #888; margin-bottom: 5px; }
-    .meter-box { width: 100%; height: 8px; background: #333; border-radius: 4px; margin-bottom: 8px; overflow: hidden; }
-    .meter-fill { height: 100%; width: 0%; background: linear-gradient(to right, var(--meter-green) 60%, var(--meter-yellow) 80%, var(--meter-red) 100%); transition: width 0.05s linear; }
-    .fader-wrapper input { width: 100%; }
-    .tabs { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
-    .tab-btn { background: transparent; color: #888; padding: 8px 5px; border: 1px solid #444; border-radius: 6px; cursor: pointer; flex: 1 1 30%; font-size: 0.8rem; transition: 0.2s; }
-    .tab-btn.active { background: #333; color: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); }
-    .range-selectors { display: flex; gap: 5px; margin-bottom: 10px; }
-    .range-col { flex: 1; }
-    .range-col label { font-size: 0.7rem; color: #666; display: block; text-align: center; }
-    select { background: #222; color: white; border: 1px solid #444; width: 100%; border-radius: 4px; padding: 5px; font-size: 0.9rem; text-align: center; }
-    .add-btn { background: #333; color: white; border: 1px solid #555; padding: 10px; width: 100%; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
-    .routine-list { list-style: none; padding: 0; margin: 0; background: #0a0a0a; border-radius: 8px; min-height: 40px; margin-bottom: 10px; }
-    .routine-item { padding: 8px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }
-    .routine-item.active { background: #1a2a1a; border-left: 3px solid var(--accent); }
-    .delete-btn { color: #666; cursor: pointer; padding: 0 10px; }
-    .play-btn { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--accent); color: #000; border: none; padding: 15px 40px; border-radius: 50px; font-size: 1.2rem; font-weight: 800; width: 80%; max-width: 300px; box-shadow: 0 0 20px rgba(0, 229, 255, 0.4); z-index: 100; transition: 0.2s; }
-    .play-btn.stop { background: #ff5252; color: white; box-shadow: none; }
-    #resultModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 200; display: none; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
-    .score-circle { width: 120px; height: 120px; border-radius: 50%; border: 5px solid var(--accent); display: flex; justify-content: center; align-items: center; font-size: 2.5rem; font-weight: bold; color: white; margin-bottom: 20px; box-shadow: 0 0 30px var(--accent); }
-    .stat-row { display: flex; gap: 15px; margin-bottom: 20px; }
-    .stat-item { text-align: center; }
-    .stat-val { font-size: 1.2rem; font-weight: bold; }
-    .stat-label { font-size: 0.8rem; color: #888; }
-    .audio-player { width: 90%; margin-bottom: 20px; }
-    .modal-btn { padding: 10px 30px; border-radius: 20px; border: 1px solid #fff; background: transparent; color: white; font-size: 1rem; cursor: pointer; }
-    .loading-mask { position: fixed; top:0; left:0; width:100%; height:100%; background: #000; z-index: 999; display: flex; justify-content: center; align-items: center; color: white; flex-direction: column; }
-    .warning-msg { color: #ff5252; font-size: 0.8rem; margin-top: 5px; display: none; }
-</style>
-"""
-
-# Part B: HTML
-html_part = """
+html_head = f"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>吉他手聲樂教練 {VERSION}</title>
+    <style>
+        :root {{ --bg-color: #000000; --ui-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #00e5ff; --meter-green: #00e676; --meter-yellow: #ffea00; --meter-red: #ff5252; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; overflow: hidden; }}
+        #gameStage {{ position: relative; width: 100vw; height: 45vh; background: #111; border-bottom: 2px solid #333; overflow: hidden; }}
+        canvas {{ display: block; width: 100%; height: 100%; }}
+        .hud-score {{ position: absolute; top: 15px; right: 15px; font-size: 1.5rem; font-weight: bold; color: white; text-shadow: 0 0 10px var(--accent); font-family: monospace; }}
+        .hud-feedback {{ position: absolute; top: 15px; left: 50%; transform: translateX(-50%); font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }}
+        #controlsArea {{ height: 55vh; overflow-y: auto; padding: 15px; box-sizing: border-box; background: var(--bg-color); transition: opacity 0.5s; padding-bottom: 80px; }}
+        #controlsArea.immersive-hidden {{ opacity: 0.1; pointer-events: none; }}
+        h1 {{ color: var(--accent); margin: 0 0 10px 0; font-size: 1.2rem; }}
+        .control-group {{ background: var(--ui-bg); border-radius: 12px; padding: 12px; margin-bottom: 12px; border: 1px solid #333; }}
+        .mixer-container {{ display: flex; gap: 10px; margin-top: 5px; }}
+        .mixer-channel {{ flex: 1; background: #111; padding: 10px; border-radius: 8px; border: 1px solid #333; text-align: center; }}
+        .mixer-label {{ font-size: 0.8rem; color: #888; margin-bottom: 5px; }}
+        .meter-box {{ width: 100%; height: 8px; background: #333; border-radius: 4px; margin-bottom: 8px; overflow: hidden; }}
+        .meter-fill {{ height: 100%; width: 0%; background: linear-gradient(to right, var(--meter-green) 60%, var(--meter-yellow) 80%, var(--meter-red) 100%); transition: width 0.05s linear; }}
+        .fader-wrapper input {{ width: 100%; }}
+        .tabs {{ display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }}
+        .tab-btn {{ background: transparent; color: #888; padding: 8px 5px; border: 1px solid #444; border-radius: 6px; cursor: pointer; flex: 1 1 30%; font-size: 0.8rem; transition: 0.2s; }}
+        .tab-btn.active {{ background: #333; color: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); }}
+        .range-selectors {{ display: flex; gap: 5px; margin-bottom: 10px; }}
+        .range-col {{ flex: 1; }}
+        .range-col label {{ font-size: 0.7rem; color: #666; display: block; text-align: center; }}
+        select {{ background: #222; color: white; border: 1px solid #444; width: 100%; border-radius: 4px; padding: 5px; font-size: 0.9rem; text-align: center; }}
+        .add-btn {{ background: #333; color: white; border: 1px solid #555; padding: 10px; width: 100%; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 10px; }}
+        .routine-list {{ list-style: none; padding: 0; margin: 0; background: #0a0a0a; border-radius: 8px; min-height: 40px; margin-bottom: 10px; }}
+        .routine-item {{ padding: 8px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }}
+        .routine-item.active {{ background: #1a2a1a; border-left: 3px solid var(--accent); }}
+        .delete-btn {{ color: #666; cursor: pointer; padding: 0 10px; }}
+        .play-btn {{ position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--accent); color: #000; border: none; padding: 15px 40px; border-radius: 50px; font-size: 1.2rem; font-weight: 800; width: 80%; max-width: 300px; box-shadow: 0 0 20px rgba(0, 229, 255, 0.4); z-index: 100; transition: 0.2s; }}
+        .play-btn.stop {{ background: #ff5252; color: white; box-shadow: none; }}
+        #resultModal {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 200; display: none; flex-direction: column; justify-content: center; align-items: center; text-align: center; }}
+        .score-circle {{ width: 120px; height: 120px; border-radius: 50%; border: 5px solid var(--accent); display: flex; justify-content: center; align-items: center; font-size: 2.5rem; font-weight: bold; color: white; margin-bottom: 20px; box-shadow: 0 0 30px var(--accent); }}
+        .stat-row {{ display: flex; gap: 15px; margin-bottom: 20px; }}
+        .stat-item {{ text-align: center; }}
+        .stat-val {{ font-size: 1.2rem; font-weight: bold; }}
+        .stat-label {{ font-size: 0.8rem; color: #888; }}
+        .audio-player {{ width: 90%; margin-bottom: 20px; }}
+        .modal-btn {{ padding: 10px 30px; border-radius: 20px; border: 1px solid #fff; background: transparent; color: white; font-size: 1rem; cursor: pointer; }}
+        .loading-mask {{ position: fixed; top:0; left:0; width:100%; height:100%; background: #000; z-index: 999; display: flex; justify-content: center; align-items: center; color: white; flex-direction: column; }}
+        .warning-msg {{ color: #ff5252; font-size: 0.8rem; margin-top: 5px; display: none; }}
+    </style>
+</head>
+<body>
 <div id="loadingMask" class="loading-mask">
     <div style="font-size: 3rem; margin-bottom: 20px;">🎧</div>
-    <div>v27.2 邏輯修復版</div>
+    <div>吉他手聲樂教練 {VERSION}</div>
     <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化...</div>
     <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem;"></div>
 </div>
@@ -96,7 +102,7 @@ html_part = """
 </div>
 
 <div id="controlsArea">
-    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">v27.2</span></h1>
+    <h1>Vocal Trainer <span style="font-size:0.8rem; color:#666;">{VERSION}</span></h1>
     
     <div class="control-group">
         <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">🎛️ 錄音室混音台</div>
@@ -177,7 +183,6 @@ html_part = """
 </div>
 """
 
-# Part C: JavaScript
 js_part = """
 <script>
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -437,7 +442,6 @@ js_part = """
         ctx.strokeStyle = "#fff"; ctx.beginPath(); ctx.moveTo(canvas.width * 0.2, 0); ctx.lineTo(canvas.width * 0.2, canvas.height); ctx.stroke();
     }
 
-    // v27.2: 音準平滑修正
     function detectAndDrawPitch(now, playheadX) {
         if (!vocalAnalyser) return;
         vocalAnalyser.getFloatTimeDomainData(audioBuffer);
@@ -447,17 +451,12 @@ js_part = """
 
         if (freq !== -1) {
             let rawMidi = 12 * (Math.log(freq / 440) / Math.log(2)) + 69;
-            
             // v27.2: 倍頻與平滑修正
             if (userPitchHistory.length > 0 && userPitchHistory[userPitchHistory.length - 1].midi) {
                 let prev = userPitchHistory[userPitchHistory.length - 1].midi;
-                
-                // 倍頻檢查: 如果跳太遠 (超過7個半音)，降低平滑權重(或暫時忽略)
                 if (Math.abs(rawMidi - prev) > 7) {
-                     // 這裡選擇比較保守的更新: 稍微跟隨，但不大改
                      detectedMidi = prev * 0.9 + rawMidi * 0.1;
                 } else {
-                     // 正常情況: 平滑係數 0.5 (平衡)
                      detectedMidi = prev * 0.5 + rawMidi * 0.5;
                 }
             } else { detectedMidi = rawMidi; }
@@ -522,16 +521,12 @@ js_part = """
         }
         nextNoteTime += (countInBeats * beatDur);
         
-        // v27.2: 修正 Pattern 接力 (一次預判 3 個)
         let root1 = getMidiPitch(currentRoots[0]); 
         previewPatternVisuals(root1, nextNoteTime, beatDur);
-
         if (currentRoots.length > 1) {
             let root2 = getMidiPitch(currentRoots[1]);
             let len = (routineQueue[currentRoutineIndex].mode==='scale5') ? 9 : (routineQueue[currentRoutineIndex].mode==='triad') ? 5 : 3; 
             previewPatternVisuals(root2, nextNoteTime + (len+2)*beatDur, beatDur);
-            
-            // 這裡補上第三個 (P3)，防止接棒掉落
             if (currentRoots.length > 2) {
                  let root3 = getMidiPitch(currentRoots[2]);
                  previewPatternVisuals(root3, nextNoteTime + (len+2)*beatDur*2, beatDur);
@@ -627,37 +622,32 @@ js_part = """
 """
 
 # ---------------------------------------------------------
-# 5. 組合並寫入檔案
+# 5. 寫入檔案 (Stream Write)
 # ---------------------------------------------------------
-
-print("🔨 [3/4] 正在組裝 HTML 檔案...")
-
-final_content = """<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>!!!Right On Pitch!!! Your Daily Vocal Workout v27.2</title>
-""" + css_part + """
-</head>
-<body>
-""" + html_part + """
-    <script>
-""" + player_code + """
-""" + piano_code + """
-    </script>
-""" + js_part + """
-</body>
-</html>
-"""
-
-output_filename = "VocalTrainer_Offline_v27_2.html"
-
 try:
-    print(f"💾 [4/4] 正在寫入 {output_filename} ...")
-    with open(output_filename, "w", encoding="utf-8") as f:
-        f.write(final_content)
-    print(f"✅ 成功！檔案已建立: {output_filename}")
+    print(f"💾 [4/4] 正在寫入 {FILENAME} ...")
+    
+    with open(FILENAME, "w", encoding="utf-8") as f:
+        # 分段寫入，避免記憶體溢位
+        f.write('<!DOCTYPE html>\n<html lang="zh-TW">\n<head>\n')
+        f.write('<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">\n')
+        f.write(f'<title>吉他手聲樂教練 {VERSION}</title>\n')
+        f.write(css_part)
+        f.write('\n</head>\n<body>\n')
+        f.write(html_part)
+        f.write('\n<script>\n')
+        f.write(player_code)
+        f.write('\n')
+        f.write(piano_code)
+        f.write('\n</script>\n')
+        f.write(js_part)
+        f.write('\n</body>\n</html>')
+        
+    print(f"✅ 成功！檔案已建立: {FILENAME}")
+    
+    # 現場指證: 列出檔案確認存在
+    print("📂 目前目錄檔案列表:")
+    print(os.listdir("."))
     
 except Exception as e:
     print(f"❌ 寫入檔案失敗: {e}")
