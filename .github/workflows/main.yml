@@ -2,13 +2,14 @@ name: 自動打包聲樂教練 HTML
 
 # 觸發條件：當 main 分支有代碼推送時
 on:
-# 在您的 yaml 檔案中加入這段
-concurrency:
-  group: "pages"
-  cancel-in-progress: true
   push:
     branches: [ "main" ]
   workflow_dispatch: # 允許手動按按鈕觸發
+
+# 🔥 加入這一段
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 permissions:
   contents: write # 允許機器人修改倉庫內容
