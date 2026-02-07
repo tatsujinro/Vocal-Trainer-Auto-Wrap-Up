@@ -3,17 +3,19 @@ import os
 import ssl
 
 # ==========================================
-# 版本更新: v30.2 (Stable Arcade)
-# 修正項目:
-# 1. 補回 P4 (四度) 與 P5 (五度) 練習模式
-# 2. 修復 generateTargets 寫死三和弦的邏輯錯誤
-# 3. 修復動態鏡頭因「除以零」導致畫面 NaN (音符消失) 的 Bug
-# 4. 包含 v30.1 的所有修正 (預備拍、BPM、死掉動畫)
+# 版本更新: v33.2 (Stable Polish)
+# 
+# 整合修復:
+# 1. [Audio] scheduleAheadTime = 0.5 (修復漏音)
+# 2. [Feature] Start -> Peak -> End 完整路徑生成
+# 3. [Scoring] 動態分母計算 + Good 納入評分 (修復 Rank F)
+# 4. [Flow] Auto-End (2秒後自動結算)
+# 5. [Visual] 斷線處理 (消除心電圖垂直線)
 # ==========================================
-VERSION = "v30_2_Stable"
+VERSION = "v33_2"
 FILENAME = f"VocalTrainer_Offline_{VERSION}.html"
 
-print(f"🚀 正在開始打包 {VERSION} (穩定街機版)...")
+print(f"🚀 正在開始打包 {VERSION} (穩定版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -42,35 +44,32 @@ except Exception as e:
     exit(1)
 
 # ---------------------------------------------------------
-# 4. 定義內容區塊
+# CSS
 # ---------------------------------------------------------
-
-# Part A: CSS
 CSS_PART = """
 <style>
     :root { 
         --bg-color: #050510; 
         --ui-bg: rgba(20, 20, 30, 0.95); 
         --text-main: #e0e0e0; 
-        --accent: #00e5ff; /* Cyan */
-        --accent-2: #ff00ff; /* Magenta */
+        --accent: #00e5ff; 
+        --accent-2: #ff00ff; 
         --perfect: #00e676; 
         --good: #ffea00; 
         --miss: #ff5252;
     }
     body { font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
     
-    #gameStage { position: relative; width: 100vw; height: 50vh; background: #080818; border-bottom: 2px solid #333; overflow: hidden; transition: filter 0.5s; }
+    #gameStage { position: relative; width: 100vw; height: 50vh; background: #080818; border-bottom: 2px solid #333; overflow: hidden; transform: translateZ(0); }
     canvas { display: block; width: 100%; height: 100%; }
     
     .hud-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
     
-    /* HP Bar */
-    .hp-container { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 60%; height: 15px; background: #333; border: 2px solid #555; border-radius: 10px; overflow: hidden; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
-    .hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff5252, #ffea00, #00e676); transition: width 0.2s linear; }
+    .hp-container { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 60%; height: 15px; background: #333; border: 2px solid #555; border-radius: 10px; overflow: hidden; }
+    .hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff5252, #ffea00, #00e676); transition: width 0.2s; will-change: width; }
     .hp-text { position: absolute; top: 12px; right: 22%; color: #fff; font-size: 0.8rem; font-weight: bold; text-shadow: 1px 1px 2px black; }
 
-    .combo-container { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); text-align: center; opacity: 0; transition: opacity 0.2s, transform 0.1s; }
+    .combo-container { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); text-align: center; opacity: 0; transition: opacity 0.2s, transform 0.1s; will-change: opacity, transform; }
     .combo-num { font-size: 5rem; font-weight: 900; color: rgba(255,255,255,0.1); -webkit-text-stroke: 2px var(--accent); text-shadow: 0 0 20px var(--accent); font-family: 'Impact', sans-serif; }
     .combo-label { font-size: 1.5rem; color: var(--accent); letter-spacing: 5px; font-weight: bold; }
     .combo-active { opacity: 0.8; transform: translate(-50%, -50%) scale(1.1); }
@@ -103,33 +102,32 @@ CSS_PART = """
     .rank-F { color: var(--miss); }
     
     .loading-mask { position: fixed; top:0; left:0; width:100%; height:100%; background: #000; z-index: 999; display: flex; justify-content: center; align-items: center; color: var(--accent); flex-direction: column; }
-    
     .stage-dead { filter: grayscale(100%) brightness(0.5) blur(2px); }
+    
+    .result-actions { display: flex; gap: 20px; margin-top: 20px; }
+    .result-btn { padding: 15px 30px; border-radius: 30px; font-size: 1.2rem; font-weight: bold; border: none; cursor: pointer; text-transform: uppercase; color: white; min-width: 150px; }
+    .btn-restart { background: var(--accent); box-shadow: 0 0 15px rgba(0,229,255,0.4); }
+    .btn-home { background: #444; box-shadow: 0 0 15px rgba(255,255,255,0.1); }
 </style>
 """
 
 # Part B: HTML Body
 HTML_PART = """
 <div id="loadingMask" class="loading-mask">
-    <div style="font-size: 3rem; margin-bottom: 20px;">🛡️</div>
-    <div>v30.2 Stable</div>
-    <div style="font-size: 0.8rem; color: #888; margin-top:10px;">修復鏡頭與練習模式...</div>
+    <div style="font-size: 3rem; margin-bottom: 20px;">🔥</div>
+    <div>v33.2</div>
+    <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化中...</div>
 </div>
 
 <div id="gameStage">
     <canvas id="gameCanvas"></canvas>
     
     <div class="hud-layer">
-        <div class="hp-container">
-            <div class="hp-fill" id="hpBar"></div>
-        </div>
+        <div class="hp-container"><div class="hp-fill" id="hpBar"></div></div>
         <div class="hp-text">HP</div>
         <div class="hud-score" id="hudScore">SCORE: 0</div>
-        <div class="combo-container" id="comboContainer">
-            <div class="combo-num" id="comboNum">0</div>
-            <div class="combo-label">COMBO</div>
-        </div>
-        <div class="version-tag">v30.2 Stable</div>
+        <div class="combo-container" id="comboContainer"><div class="combo-num" id="comboNum">0</div><div class="combo-label">COMBO</div></div>
+        <div class="version-tag">v33.2</div>
     </div>
 </div>
 
@@ -144,11 +142,15 @@ HTML_PART = """
             <button id="btn-p5" class="tab-btn" onclick="switchConfigMode('p5')">五度</button>
             <button id="btn-p4" class="tab-btn" onclick="switchConfigMode('p4')">四度</button>
         </div>
-        <div style="display:flex; gap:5px; margin-top:10px;">
+        
+        <div style="display:flex; gap:5px; margin-top:10px; align-items:center;">
             <select id="startNote"></select>
-            <span style="align-self:center;">⮕</span>
+            <span>⮕</span>
             <select id="peakNote"></select>
+            <span>⮕</span>
+            <select id="endNote"></select>
         </div>
+        
         <button class="add-btn" style="margin-top:10px;" onclick="addToRoutine()">⬇️ 加入挑戰清單</button>
     </div>
 
@@ -195,7 +197,10 @@ HTML_PART = """
     
     <div style="color:white; font-size:1.2rem; margin-bottom:20px;">Max Combo: <span id="resCombo" style="color:var(--accent);">0</span></div>
     
-    <button class="play-btn" style="position:relative; bottom:auto; left:auto; transform:none; width:auto; padding:10px 40px; font-size:1rem;" onclick="closeResult()">CONTINUE</button>
+    <div class="result-actions">
+        <button class="result-btn btn-home" onclick="goHome()">🏠 HOME</button>
+        <button class="result-btn btn-restart" onclick="restartGame()">🔄 RESTART</button>
+    </div>
 </div>
 """
 
@@ -205,9 +210,9 @@ JS_PART = """
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     let audioCtx, player;
     let pianoSplitterNode, monitorGainNode, mixerNode, micSource, pianoDelayNode; 
-    let pianoAnalyser, vocalAnalyser;
-    let pitchFilterNode; 
+    let pianoAnalyser, vocalAnalyser, pitchFilterNode; 
     
+    // Constants
     const FPS = 40;
     const ANALYSIS_INTERVAL = 1.0 / FPS;
     const PIXELS_PER_SEC = 120; 
@@ -242,14 +247,16 @@ JS_PART = """
     let routineQueue = [];
     let currentRoutineIndex = 0;
     let nextNoteTime = 0;
+    let lastGameTime = 0;
     let timerID;
-    let scheduleAheadTime = 0.1;
+    
+    // FIX: Increased to 0.5s to prevent high-note dropout
+    let scheduleAheadTime = 0.5; 
+    
     let editingMode = 'triad';
     let countInBeats = 4;
 
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    
-    // Updated Profiles with P4 and P5
     let rangeProfiles = {
         'triad':  { s:'C3', p:'C4', e:'C3' },
         'scale5': { s:'C3', p:'G3', e:'C3' },
@@ -260,15 +267,22 @@ JS_PART = """
 
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+    let ui = {};
 
     window.onload = function() {
+        ui = {
+            hpBar: document.getElementById('hpBar'),
+            score: document.getElementById('hudScore'),
+            comboContainer: document.getElementById('comboContainer'),
+            comboNum: document.getElementById('comboNum')
+        };
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
         initSelects();
         try {
             player = new WebAudioFontPlayer();
             document.getElementById('loadingMask').style.display = 'none';
-        } catch(e) {}
+        } catch(e) { console.log(e); }
     };
 
     function resizeCanvas() {
@@ -279,31 +293,54 @@ JS_PART = """
     function initSelects() {
         const s = document.getElementById('startNote');
         const p = document.getElementById('peakNote');
+        const e = document.getElementById('endNote');
         for(let oct=2; oct<=5; oct++) {
             notes.forEach(n => {
                 let val = `${n}${oct}`;
                 s.add(new Option(val, val));
                 p.add(new Option(val, val));
+                e.add(new Option(val, val));
             });
         }
         applyProfile('triad');
     }
     
-    function switchConfigMode(mode) { editingMode = mode; document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); document.getElementById('btn-'+mode).classList.add('active'); applyProfile(mode); }
-    function applyProfile(mode) { let d=rangeProfiles[mode]; if(d){ document.getElementById('startNote').value=d.s; document.getElementById('peakNote').value=d.p; } }
-    function addToRoutine() { 
+    function switchConfigMode(mode) {
+        editingMode = mode;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('btn-'+mode).classList.add('active');
+        applyProfile(mode);
+    }
+    
+    function applyProfile(mode) {
+        let d = rangeProfiles[mode];
+        if(d) {
+            document.getElementById('startNote').value = d.s;
+            document.getElementById('peakNote').value = d.p;
+            document.getElementById('endNote').value = d.e;
+        }
+    }
+    
+    function addToRoutine() {
         let s = document.getElementById('startNote').value;
         let p = document.getElementById('peakNote').value;
-        routineQueue.push({ mode: editingMode, s:s, p:p });
+        let e = document.getElementById('endNote').value;
+        routineQueue.push({ mode: editingMode, s:s, p:p, e:e });
         renderRoutine();
     }
+    
     function renderRoutine() {
-        let ul = document.getElementById('routineList'); ul.innerHTML = "";
+        let ul = document.getElementById('routineList');
+        ul.innerHTML = "";
         routineQueue.forEach((item, i) => {
-            ul.innerHTML += `<li style="padding:8px; border-bottom:1px solid #222; display:flex; justify-content:space-between;"><span>${i+1}. ${item.mode} (${item.s}-${item.p})</span><span onclick="routineQueue.splice(${i},1);renderRoutine();" style="color:#666;cursor:pointer;">✕</span></li>`;
+            ul.innerHTML += `<li style="padding:8px; border-bottom:1px solid #222; display:flex; justify-content:space-between;"><span>${i+1}. ${item.mode} (${item.s} ⮕ ${item.p} ⮕ ${item.e})</span><span onclick="routineQueue.splice(${i},1);renderRoutine();" style="color:#666;cursor:pointer;">✕</span></li>`;
         });
     }
-    function clearRoutine() { routineQueue=[]; renderRoutine(); }
+    
+    function clearRoutine() {
+        routineQueue = [];
+        renderRoutine();
+    }
 
     async function initAudio() {
         if(!audioCtx) {
@@ -311,20 +348,18 @@ JS_PART = """
             mixerNode = audioCtx.createMediaStreamDestination();
             pianoAnalyser = audioCtx.createAnalyser();
             vocalAnalyser = audioCtx.createAnalyser(); vocalAnalyser.fftSize = 2048;
-            
             pianoSplitterNode = audioCtx.createGain();
             monitorGainNode = audioCtx.createGain();
             pianoSplitterNode.connect(monitorGainNode);
             monitorGainNode.connect(audioCtx.destination);
-            
             pianoDelayNode = audioCtx.createDelay(1.0);
             pianoSplitterNode.connect(pianoDelayNode);
-            
             try {
                 let stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false, autoGainControl:false, noiseSuppression:false}});
                 micSource = audioCtx.createMediaStreamSource(stream);
                 pitchFilterNode = audioCtx.createBiquadFilter();
-                pitchFilterNode.type = "lowpass"; pitchFilterNode.frequency.value = 1500;
+                pitchFilterNode.type = "lowpass";
+                pitchFilterNode.frequency.value = 1500;
                 micSource.connect(pitchFilterNode);
                 pitchFilterNode.connect(vocalAnalyser);
                 let micDirect = audioCtx.createGain();
@@ -333,33 +368,45 @@ JS_PART = """
             } catch(e) { console.log("Mic error"); }
         }
         if(audioCtx.state === 'suspended') await audioCtx.resume();
-        
-        let vol = document.getElementById('volMonitor').value/100;
-        monitorGainNode.gain.value = vol;
-        let lat = document.getElementById('latencySlider').value/1000;
-        pianoDelayNode.delayTime.value = lat;
+        monitorGainNode.gain.value = document.getElementById('volMonitor').value/100;
+        pianoDelayNode.delayTime.value = document.getElementById('latencySlider').value/1000;
     }
 
     async function togglePlay() {
         if(isPlaying) { stop(); return; }
         if(routineQueue.length===0) { alert("請加入挑戰！"); return; }
         
-        await initAudio();
-        isPlaying = true; isGameOver = false; isDying = false;
-        document.getElementById('gameStage').classList.remove('stage-dead');
-        
-        hp = 100; score = 0; combo = 0; maxCombo = 0;
-        stats = {perfect:0, good:0, miss:0};
-        gameTargets = []; userPitchHistory = []; pitchSmoothingBuffer = []; particles = []; popups = [];
-        
-        currentRoutineIndex = 0;
-        document.getElementById('controlsArea').classList.add('immersive-hidden');
-        document.getElementById('playBtn').innerText = "STOP";
-        document.getElementById('playBtn').classList.add('stop');
-        
-        startRoutineItem();
-        scheduler();
-        renderLoop();
+        try {
+            await initAudio(); 
+            
+            // 1. Reset Game State
+            isPlaying = true; isGameOver = false; isDying = false;
+            document.getElementById('gameStage').classList.remove('stage-dead');
+            hp = 100; score = 0; combo = 0; maxCombo = 0;
+            stats = {perfect:0, good:0, miss:0};
+            gameTargets = []; userPitchHistory = []; pitchSmoothingBuffer = []; particles = []; popups = [];
+            currentRoutineIndex = 0;
+            lastGameTime = 0;
+            
+            // 2. Camera Reset
+            let startMidi = getMidiPitch(routineQueue[0].s);
+            cameraY = startMidi; 
+            targetCameraY = startMidi;
+            
+            // 3. UI Reset
+            document.getElementById('controlsArea').classList.add('immersive-hidden');
+            document.getElementById('playBtn').innerText = "STOP";
+            document.getElementById('playBtn').classList.add('stop');
+            updateUI(true);
+            
+            // 4. Start (with buffer)
+            setTimeout(() => {
+                startRoutineItem(); 
+                scheduler(); 
+                renderLoop();
+            }, 50);
+            
+        } catch(e) { alert("啟動失敗: " + e.message); }
     }
 
     function stop() {
@@ -373,33 +420,41 @@ JS_PART = """
         if(!isGameOver && !isDying) showResult();
     }
 
+    function scheduler() {
+        // Lookahead 0.5s for stability
+        while(isPlaying && nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
+            nextNoteTime += 0.1;
+        }
+        gameTargets.forEach(t => {
+            if(!t.played && t.startTime < audioCtx.currentTime + scheduleAheadTime) {
+                t.played = true;
+                let vol = t.isBridge ? 0.7 : 0.5;
+                player.queueWaveTable(audioCtx, pianoSplitterNode, _tone_0000_JCLive_sf2_file, t.startTime, t.midi, t.duration, vol);
+            }
+        });
+        if(isPlaying) timerID = setTimeout(scheduler, 50);
+    }
+
     function renderLoop() {
         if(!isPlaying) return;
-        
         let now = audioCtx.currentTime;
-        let futureNotes = gameTargets.filter(t => t.startTime > now && t.startTime < now + 3.0);
         
-        // BUG FIX: Prevent Divide by Zero (NaN Camera)
+        let futureNotes = gameTargets.filter(t => !t.isBridge && t.startTime > now && t.startTime < now + 3.0);
         if (futureNotes.length > 0) {
             let sum = futureNotes.reduce((a,b) => a + b.midi, 0);
             targetCameraY = sum / futureNotes.length;
-        } else {
-            // If no notes, keep camera where it is (or move to center if completely empty)
-            // targetCameraY = cameraY; 
         }
-        
-        // Safety check for NaN
         if (isNaN(targetCameraY)) targetCameraY = 60;
-        
         cameraY += (targetCameraY - cameraY) * 0.05;
 
         ctx.fillStyle = "#050510"; ctx.fillRect(0, 0, canvas.width, canvas.height);
         drawGrid(cameraY);
-        
-        let playheadX = canvas.width * 0.2;
+        let phX = canvas.width * 0.2;
         
         gameTargets.forEach(t => {
-            let x = playheadX + (t.startTime - now) * PIXELS_PER_SEC;
+            if(t.isBridge) return;
+
+            let x = phX + (t.startTime - now) * PIXELS_PER_SEC;
             let w = t.duration * PIXELS_PER_SEC;
             let y = getYfromMidi(t.midi);
             
@@ -412,37 +467,58 @@ JS_PART = """
                 ctx.fill();
                 
                 if (t.hitFrames > 0) {
-                    let fillRatio = t.hitFrames / t.totalFrames;
-                    let fillW = w * fillRatio;
+                    let fillW = w * (t.hitFrames / t.totalFrames);
                     ctx.fillStyle = "rgba(0, 229, 255, 0.8)";
-                    ctx.shadowBlur = 15; ctx.shadowColor = "#00e5ff";
+                    ctx.shadowBlur = 10; ctx.shadowColor = "#00e5ff";
                     ctx.fillRect(x, y - BLOCK_HEIGHT/2 + 2, Math.min(w, fillW), BLOCK_HEIGHT - 4);
                     ctx.shadowBlur = 0;
                 }
             }
-            
             if (!t.processed && now > t.startTime + t.duration) {
                 t.processed = true;
                 evaluateNote(t, x + w, y);
             }
         });
 
-        if(!isDying) detectAndProcessPitch(now, playheadX);
-
+        if(!isDying) detectAndProcessPitch(now, phX);
         updateAndDrawParticles();
         updateAndDrawPopups();
-        updateHUD();
         
         if(hp <= 0 && !isGameOver && !isDying) {
             triggerDeath();
+        }
+        
+        // AUTO END LOGIC: 2s after last note
+        if (!isGameOver && !isDying && lastGameTime > 0 && now > lastGameTime + 2.0) {
+            stop();
         }
 
         gameLoopId = requestAnimationFrame(renderLoop);
     }
     
+    function updateUI(force = false) {
+        if (force || isPlaying) {
+            if(ui.hpBar) {
+                ui.hpBar.style.width = hp + "%";
+                if(hp < 30) ui.hpBar.style.background = "#ff5252"; 
+                else ui.hpBar.style.background = "linear-gradient(90deg, #ff5252, #ffea00, #00e676)";
+            }
+            if(ui.score) ui.score.innerText = "SCORE: " + score;
+            if(ui.comboContainer) {
+                if(combo > 1) { 
+                    ui.comboNum.innerText = combo; 
+                    ui.comboContainer.classList.add('combo-active'); 
+                } else { 
+                    ui.comboContainer.classList.remove('combo-active'); 
+                }
+            }
+        }
+    }
+    
     function triggerDeath() {
         isDying = true;
         document.getElementById('gameStage').classList.add('stage-dead');
+        updateUI(true);
         setTimeout(() => {
             isGameOver = true;
             stop();
@@ -451,49 +527,96 @@ JS_PART = """
     }
     
     function evaluateNote(note, visualX, visualY) {
-        if(isDying) return; 
+        if(isDying || note.isBridge) return; 
+        
         let total = note.totalFrames > 0 ? note.totalFrames : 1;
         let coverage = note.hitFrames / total;
+        let hit = false;
         
         if (coverage >= 0.85) {
             combo++; score += 100 + (combo * 10); hp = Math.min(100, hp + 5); stats.perfect++;
             spawnPopup(visualX, visualY, "PERFECT", "#00e676"); spawnParticles(visualX, visualY, "#00e676", 10);
+            hit = true;
         } else if (coverage >= 0.50) {
             combo++; score += 50 + (combo * 5); hp = Math.min(100, hp + 2); stats.good++;
             spawnPopup(visualX, visualY, "GOOD", "#ffea00");
+            hit = true;
         } else {
             combo = 0; hp = Math.max(0, hp - 10); 
             stats.miss++;
             spawnPopup(visualX, visualY, "MISS", "#ff5252");
         }
         if (combo > maxCombo) maxCombo = combo;
+        if (hit || combo === 0) updateUI();
     }
 
+    function detectPitchYIN(buffer, sampleRate) {
+        const threshold = 0.15; 
+        const bufferSize = buffer.length; 
+        const yinBufferLength = bufferSize / 2; 
+        let yinBuffer = new Float32Array(yinBufferLength);
+        const minTau = Math.floor(sampleRate / 1000); 
+        const maxTau = Math.floor(sampleRate / 60); 
+        if (maxTau > yinBufferLength) return -1;
+        for (let tau = 0; tau < maxTau; tau++) { 
+            let sum = 0; 
+            for (let i = 0; i < yinBufferLength; i++) { 
+                let delta = buffer[i] - buffer[i + tau]; 
+                sum += delta * delta; 
+            } 
+            yinBuffer[tau] = sum; 
+        }
+        yinBuffer[0] = 1; let runningSum = 0; yinBuffer[0] = 1;
+        for (let tau = 1; tau < maxTau; tau++) { runningSum += yinBuffer[tau]; yinBuffer[tau] *= tau / runningSum; }
+        let tauEstimate = -1; 
+        for (let tau = minTau; tau < maxTau; tau++) { if (yinBuffer[tau] < threshold) { while (tau + 1 < maxTau && yinBuffer[tau + 1] < yinBuffer[tau]) { tau++; } tauEstimate = tau; break; } }
+        if (tauEstimate === -1) { let minVal = 100; for (let tau = minTau; tau < maxTau; tau++) { if (yinBuffer[tau] < minVal) { minVal = yinBuffer[tau]; tauEstimate = tau; } } }
+        if (tauEstimate === -1) return -1;
+        let betterTau = tauEstimate; 
+        if (tauEstimate > 0 && tauEstimate < maxTau - 1) { let s0 = yinBuffer[tauEstimate - 1]; let s1 = yinBuffer[tauEstimate]; let s2 = yinBuffer[tauEstimate + 1]; let adjustment = (s2 - s0) / (2 * (2 * s1 - s2 - s0)); betterTau += adjustment; }
+        return sampleRate / betterTau;
+    }
+
+    // --- VISUAL FIX: v33.1 Logic (Line Break) ---
     function detectAndProcessPitch(now, playheadX) {
         if (now - lastAnalysisTime < ANALYSIS_INTERVAL) { drawTrail(now, playheadX); return; }
         lastAnalysisTime = now;
+        
         if (!vocalAnalyser) return;
         
         vocalAnalyser.getFloatTimeDomainData(audioBuffer);
-        let rms = 0; for(let i=0; i<audioBuffer.length; i++) rms += audioBuffer[i]*audioBuffer[i];
+        let rms = 0;
+        for(let i=0; i<audioBuffer.length; i++) rms += audioBuffer[i]*audioBuffer[i];
         rms = Math.sqrt(rms/audioBuffer.length);
         
-        let detectedMidi = null; let color = "rgba(255,255,255,0.2)"; let isHit = false;
+        let detectedMidi = null; 
+        let color = "rgba(255,255,255,0.2)"; 
+        let isHit = false;
 
         if (rms > 0.01) {
             let freq = detectPitchYIN(audioBuffer, audioCtx.sampleRate);
             if (freq !== -1) {
-                let rawMidi = freqToMidi(freq);
-                let currentTarget = gameTargets.find(t => now >= t.startTime && now <= t.startTime + t.duration);
+                // v29.8.1 Logic (Restored)
+                let currentTarget = gameTargets.find(t => !t.isBridge && now >= t.startTime && now <= t.startTime + t.duration);
                 if (currentTarget) {
-                    let diff = rawMidi - currentTarget.midi;
-                    if (Math.abs(diff - 12) < 2.0 || Math.abs(diff - 24) < 2.0) {
-                        vocalAnalyser.getFloatFrequencyData(frequencyBuffer);
-                        let targetFreq = midiToFreq(currentTarget.midi);
-                        let peakCheck = checkPeakProminence(targetFreq, audioCtx.sampleRate, frequencyBuffer);
-                        let energyHigh = getLinearEnergy(freq, audioCtx.sampleRate, frequencyBuffer);
-                        let ratio = (energyHigh > 0) ? (peakCheck.energy / energyHigh) : 0;
-                        if (ratio > 0.35 && peakCheck.isPeak) freq = targetFreq;
+                    let targetFreq = midiToFreq(currentTarget.midi);
+                    let ratio = freq / targetFreq;
+                    let nearestInt = Math.round(ratio);
+                    let diffFromInt = Math.abs(ratio - nearestInt);
+                    
+                    if (nearestInt > 1 && nearestInt <= 4 && diffFromInt < 0.1) {
+                         vocalAnalyser.getFloatFrequencyData(frequencyBuffer);
+                         let peakCheck = checkPeakProminence(targetFreq, audioCtx.sampleRate, frequencyBuffer);
+                         if (peakCheck.isPeak && peakCheck.energy > 0) freq = targetFreq;
+                    }
+                    else {
+                        let rawMidi = freqToMidi(freq);
+                        let midiDiff = rawMidi - currentTarget.midi;
+                         if (Math.abs(midiDiff - 12) < 2.0 || Math.abs(midiDiff - 24) < 2.0 || Math.abs(midiDiff - 19) < 2.0) {
+                             vocalAnalyser.getFloatFrequencyData(frequencyBuffer);
+                             let peakCheck = checkPeakProminence(targetFreq, audioCtx.sampleRate, frequencyBuffer);
+                             if (peakCheck.isPeak) freq = targetFreq;
+                         }
                     }
                 }
                 
@@ -505,34 +628,51 @@ JS_PART = """
                 if (currentTarget) {
                     currentTarget.totalFrames++;
                     if (Math.abs(detectedMidi - currentTarget.midi) <= 0.5) {
-                        isHit = true; currentTarget.hitFrames++; color = "#00e676"; score += 1;
+                        isHit = true; 
+                        currentTarget.hitFrames++; 
+                        color = "#00e676"; 
+                        score += 1;
                         if (Math.random() < 0.2) spawnParticles(playheadX, getYfromMidi(detectedMidi), "#00e676", 1);
-                    } else color = "#ff5252";
+                    } else {
+                        color = "#ff5252";
+                    }
                 }
-            } else pitchSmoothingBuffer = [];
-        } else {
-            let currentTarget = gameTargets.find(t => now >= t.startTime && now <= t.startTime + t.duration);
-            if (currentTarget) currentTarget.totalFrames++;
+            } else {
+                pitchSmoothingBuffer = [];
+            }
         }
-
+        
         userPitchHistory.push({ time: now + VISUAL_OFFSET_SEC, midi: detectedMidi, color: color, isHit: isHit });
         while(userPitchHistory.length > 0 && userPitchHistory[0].time < now - 2.0) userPitchHistory.shift();
         drawTrail(now, playheadX);
     }
+    
+    function getLinearEnergy(targetFreq, sampleRate, buffer) { let nyquist = sampleRate / 2; let index = Math.round((targetFreq / nyquist) * buffer.length); if (index < 0 || index >= buffer.length) return 0; let db = buffer[index]; return Math.pow(10, db / 20); }
+
+    function checkPeakProminence(targetFreq, sampleRate, buffer) {
+        let nyquist = sampleRate / 2; let centerIdx = Math.round((targetFreq / nyquist) * buffer.length);
+        if (centerIdx < 2 || centerIdx >= buffer.length - 2) return { energy: 0, isPeak: false };
+        let maxIdx = centerIdx; let maxDb = buffer[centerIdx];
+        if (buffer[centerIdx-1] > maxDb) { maxDb = buffer[centerIdx-1]; maxIdx = centerIdx-1; }
+        if (buffer[centerIdx+1] > maxDb) { maxDb = buffer[centerIdx+1]; maxIdx = centerIdx+1; }
+        let centerLinear = Math.pow(10, maxDb / 20);
+        let neighborAvg = (Math.pow(10, buffer[maxIdx-2]/20) + Math.pow(10, buffer[maxIdx+2]/20)) / 2;
+        return { energy: centerLinear, isPeak: centerLinear > (neighborAvg * 1.2) };
+    }
 
     function drawGrid(camY) {
-        if(isNaN(camY)) camY = 60; // Extra safety
+        if(isNaN(camY)) camY = 60;
         let centerMidi = Math.round(camY);
         ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.font = "12px monospace";
         for (let m = centerMidi - 12; m <= centerMidi + 12; m++) {
             let y = getYfromMidi(m);
             let isC = (m % 12) === 0;
-            ctx.strokeStyle = isC ? "#444" : "#222"; ctx.lineWidth = 1;
+            ctx.strokeStyle = isC ? "#444" : "#222";
+            ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
             if (isC) { ctx.fillStyle = "#666"; ctx.fillText(getNoteName(m), canvas.width - 10, y); }
         }
-        ctx.strokeStyle = "rgba(255,255,255,0.3)";
-        ctx.beginPath(); ctx.moveTo(canvas.width * 0.2, 0); ctx.lineTo(canvas.width * 0.2, canvas.height); ctx.stroke();
+        ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.beginPath(); ctx.moveTo(canvas.width * 0.2, 0); ctx.lineTo(canvas.width * 0.2, canvas.height); ctx.stroke();
     }
 
     function drawTrail(now, phX) {
@@ -540,9 +680,11 @@ JS_PART = """
         ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round";
         for(let i=1; i<userPitchHistory.length; i++) {
             let p1 = userPitchHistory[i-1]; let p2 = userPitchHistory[i];
-            if (p1.midi && p2.midi && Math.abs(p1.midi - p2.midi) < 5) {
-                let x1 = phX + (p1.time - now) * PIXELS_PER_SEC;
-                let x2 = phX + (p2.time - now) * PIXELS_PER_SEC;
+            if (p1.midi && p2.midi) {
+                // v33.1 Visual Fix: Break line on large jumps
+                if (Math.abs(p1.midi - p2.midi) > 3.0) continue;
+                
+                let x1 = phX + (p1.time - now) * PIXELS_PER_SEC; let x2 = phX + (p2.time - now) * PIXELS_PER_SEC;
                 let y1 = getYfromMidi(p1.midi); let y2 = getYfromMidi(p2.midi);
                 if(!isNaN(y1) && !isNaN(y2)) {
                     ctx.strokeStyle = p2.color;
@@ -561,6 +703,7 @@ JS_PART = """
             ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
         }
     }
+    
     function spawnPopup(x, y, text, color) { popups.push({x:x, y:y, text:text, color:color, life:1.0, floatY:0}); }
     function updateAndDrawPopups() {
         ctx.font = "bold 20px Arial"; ctx.textAlign = "center";
@@ -570,128 +713,130 @@ JS_PART = """
             ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.shadowBlur = 5; ctx.shadowColor = "black"; ctx.fillText(p.text, p.x, p.y + p.floatY); ctx.shadowBlur = 0; ctx.globalAlpha = 1.0;
         }
     }
-    function updateHUD() {
-        let hpBar = document.getElementById('hpBar'); hpBar.style.width = hp + "%";
-        if(hp < 30) hpBar.style.background = "#ff5252"; else hpBar.style.background = "linear-gradient(90deg, #ff5252, #ffea00, #00e676)";
-        document.getElementById('hudScore').innerText = "SCORE: " + score;
-        let comboEl = document.getElementById('comboContainer');
-        if(combo > 1) { document.getElementById('comboNum').innerText = combo; comboEl.classList.add('combo-active'); } else comboEl.classList.remove('combo-active');
-    }
 
     function midiToFreq(m) { return 440 * Math.pow(2, (m-69)/12); }
     function freqToMidi(f) { return 12 * (Math.log(f/440)/Math.log(2)) + 69; }
     function getYfromMidi(m) { return (canvas.height/2) - (m - cameraY) * PIXELS_PER_SEMITONE; }
     function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
     function getNoteName(m) { let n=notes[m%12]; let o=Math.floor(m/12)-1; return n+o; }
-
-    function detectPitchYIN(buffer, sampleRate) {
-        const threshold = 0.15; const bufferSize = buffer.length; const yinBufferLength = bufferSize / 2; let yinBuffer = new Float32Array(yinBufferLength);
-        const minTau = Math.floor(sampleRate / 1000); const maxTau = Math.floor(sampleRate / 60); if (maxTau > yinBufferLength) return -1;
-        for (let tau = 0; tau < maxTau; tau++) { let sum = 0; for (let i = 0; i < yinBufferLength; i++) { let delta = buffer[i] - buffer[i + tau]; sum += delta * delta; } yinBuffer[tau] = sum; }
-        yinBuffer[0] = 1; let runningSum = 0; yinBuffer[0] = 1;
-        for (let tau = 1; tau < maxTau; tau++) { runningSum += yinBuffer[tau]; yinBuffer[tau] *= tau / runningSum; }
-        let tauEstimate = -1;
-        for (let tau = minTau; tau < maxTau; tau++) { if (yinBuffer[tau] < threshold) { while (tau + 1 < maxTau && yinBuffer[tau + 1] < yinBuffer[tau]) tau++; tauEstimate = tau; break; } }
-        if (tauEstimate === -1) { let minVal = 100; for (let tau = minTau; tau < maxTau; tau++) { if (yinBuffer[tau] < minVal) { minVal = yinBuffer[tau]; tauEstimate = tau; } } }
-        if (tauEstimate === -1) return -1;
-        let betterTau = tauEstimate;
-        if (tauEstimate > 0 && tauEstimate < maxTau - 1) { let s0 = yinBuffer[tauEstimate - 1]; let s1 = yinBuffer[tauEstimate]; let s2 = yinBuffer[tauEstimate + 1]; let adjustment = (s2 - s0) / (2 * (2 * s1 - s2 - s0)); betterTau += adjustment; }
-        return sampleRate / betterTau;
-    }
-    function getLinearEnergy(targetFreq, sampleRate, buffer) { let nyquist = sampleRate / 2; let index = Math.round((targetFreq / nyquist) * buffer.length); if (index < 0 || index >= buffer.length) return 0; let db = buffer[index]; return Math.pow(10, db / 20); }
-    function checkPeakProminence(targetFreq, sampleRate, buffer) { let nyquist = sampleRate / 2; let centerIdx = Math.round((targetFreq / nyquist) * buffer.length); if (centerIdx < 2 || centerIdx >= buffer.length - 2) return { energy: 0, isPeak: false }; let maxIdx = centerIdx; let maxDb = buffer[centerIdx]; if (buffer[centerIdx-1] > maxDb) { maxDb = buffer[centerIdx-1]; maxIdx = centerIdx-1; } if (buffer[centerIdx+1] > maxDb) { maxDb = buffer[centerIdx+1]; maxIdx = centerIdx+1; } let centerLinear = Math.pow(10, maxDb / 20); let leftDb = buffer[maxIdx - 2]; let rightDb = buffer[maxIdx + 2]; let leftLinear = Math.pow(10, leftDb / 20); let rightLinear = Math.pow(10, rightDb / 20); let neighborAvg = (leftLinear + rightLinear) / 2; let isProminent = centerLinear > (neighborAvg * 1.5); return { energy: centerLinear, isPeak: isProminent }; }
+    function playStickClick(t) { let osc = audioCtx.createOscillator(); let g = audioCtx.createGain(); osc.frequency.setValueAtTime(1200, t); osc.frequency.exponentialRampToValueAtTime(800, t+0.05); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5, t+0.001); g.gain.exponentialRampToValueAtTime(0.001, t+0.08); osc.connect(g); g.connect(audioCtx.destination); osc.start(t); osc.stop(t+0.1); }
+    function playChord(root, t, dur) { [0,4,7].forEach(s => player.queueWaveTable(audioCtx, pianoSplitterNode, _tone_0000_JCLive_sf2_file, t, root+s, dur, 0.3)); }
+    function getMidiPitch(n) { let note = n.slice(0, -1), oct = parseInt(n.slice(-1)); return notes.indexOf(note) + (oct + 1) * 12; }
 
     function startRoutineItem() {
         let config = routineQueue[currentRoutineIndex];
-        generateTargets(config);
+        let bpm = document.getElementById('bpm').value; 
+        let beatDur = 60.0/bpm;
         
         let now = audioCtx.currentTime;
-        if (nextNoteTime < now) nextNoteTime = now + 0.5;
-        let bpm = document.getElementById('bpm').value; 
-        let beatDur = 60.0/bpm;
+        let playStartTime = now + 1.0; 
+        nextNoteTime = playStartTime;
         
-        // Count-in Audio
         let rootMidi = getMidiPitch(config.s);
-        playChord(rootMidi, nextNoteTime, beatDur * 4);
-        for(let i=0; i<4; i++) playStickClick(nextNoteTime + i*beatDur);
+        playChord(rootMidi, playStartTime, beatDur * 4);
+        for(let i=0; i<4; i++) playStickClick(playStartTime + i*beatDur);
         
-        nextNoteTime += (4 * beatDur);
+        let singingStartTime = playStartTime + (4 * beatDur);
+        generateTargets(config, singingStartTime, beatDur);
+        
+        nextNoteTime = singingStartTime; 
     }
     
-    function generateTargets(config) {
+    // FEATURE: Full Path Generation (Start -> Peak -> End)
+    function generateTargets(config, startTime, beatDur) {
         let allOpts = []; for(let oct=2; oct<=5; oct++) notes.forEach(n => allOpts.push(`${n}${oct}`));
-        let sIdx = allOpts.indexOf(config.s), pIdx = allOpts.indexOf(config.p);
+        let sIdx = allOpts.indexOf(config.s);
+        let pIdx = allOpts.indexOf(config.p);
+        let eIdx = allOpts.indexOf(config.e);
+        
         let currentRoots = [];
-        if (sIdx <= pIdx) for(let i=sIdx; i<=pIdx; i++) currentRoots.push(allOpts[i]);
         
-        let bpm = document.getElementById('bpm').value; 
-        let beatDur = 60.0/bpm;
-        let currentTime = nextNoteTime;
+        // Ascent: Start -> Peak
+        if (sIdx <= pIdx) {
+            for(let i=sIdx; i<=pIdx; i++) currentRoots.push(allOpts[i]);
+        }
         
-        currentRoots.forEach(r => {
+        // Descent: (Peak-1) -> End
+        // Check to avoid duplicates if Peak == Start
+        if (eIdx !== -1 && pIdx > eIdx) {
+            for(let i=pIdx-1; i>=eIdx; i--) currentRoots.push(allOpts[i]);
+        }
+        
+        let currentTime = startTime; 
+        
+        currentRoots.forEach((r, idx) => {
             let rootMidi = getMidiPitch(r);
-            // BUG FIX: Dynamic Intervals based on Mode
-            let intervals = [0, 4, 7, 4, 0]; // Default Triad
+            let intervals = [0, 4, 7, 4, 0];
             if(config.mode === 'scale5') intervals = [0, 2, 4, 5, 7, 5, 4, 2, 0];
             else if(config.mode === 'octave') intervals = [0, 12, 0];
             else if(config.mode === 'p5') intervals = [0, 7, 0];
             else if(config.mode === 'p4') intervals = [0, 5, 0];
             
             intervals.forEach((iv, i) => {
-                let noteDur = beatDur * 0.9;
-                gameTargets.push({
-                    midi: rootMidi + iv,
-                    startTime: currentTime + (i * beatDur),
-                    duration: noteDur,
-                    hitFrames: 0,
-                    totalFrames: 0,
-                    processed: false,
-                    played: false
+                gameTargets.push({ 
+                    midi: rootMidi + iv, 
+                    startTime: currentTime + (i * beatDur), 
+                    duration: beatDur * 0.9, 
+                    hitFrames: 0, totalFrames: 0, processed: false, played: false, isBridge: false
                 });
             });
-            currentTime += (intervals.length + 2) * beatDur;
-        });
-    }
-    
-    function scheduler() {
-        while(isPlaying && nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
-            nextNoteTime += 0.1;
-        }
-        // Audio Scheduler
-        gameTargets.forEach(t => {
-            if(!t.played && t.startTime < audioCtx.currentTime + scheduleAheadTime) {
-                t.played = true;
-                player.queueWaveTable(audioCtx, pianoSplitterNode, _tone_0000_JCLive_sf2_file, t.startTime, t.midi, t.duration, 0.5);
+            
+            let patternDuration = intervals.length * beatDur;
+            let restDuration = 2 * beatDur;
+            
+            // Bridge Logic
+            if (idx < currentRoots.length - 1) {
+                // Beat 1: Current
+                gameTargets.push({ midi: rootMidi, startTime: currentTime + patternDuration, duration: beatDur, hitFrames: 0, totalFrames: 0, processed: true, played: false, isBridge: true });
+                // Beat 2: Next
+                let nextRootMidi = getMidiPitch(currentRoots[idx+1]);
+                gameTargets.push({ midi: nextRootMidi, startTime: currentTime + patternDuration + beatDur, duration: beatDur, hitFrames: 0, totalFrames: 0, processed: true, played: false, isBridge: true });
             }
+
+            currentTime += (patternDuration + restDuration);
         });
-        if(isPlaying) timerID = setTimeout(scheduler, 50);
+        nextNoteTime = currentTime;
+        lastGameTime = currentTime; 
     }
     
-    function playStickClick(t) { 
-        let osc = audioCtx.createOscillator(); let g = audioCtx.createGain(); 
-        osc.frequency.setValueAtTime(1200, t); osc.frequency.exponentialRampToValueAtTime(800, t+0.05); 
-        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5, t+0.001); g.gain.exponentialRampToValueAtTime(0.001, t+0.08); 
-        osc.connect(g); g.connect(audioCtx.destination); osc.start(t); osc.stop(t+0.1); 
+    function restartGame() {
+        document.getElementById('resultModal').style.display = 'none';
+        togglePlay();
     }
-    function playChord(root, t, dur) { 
-        [0,4,7].forEach(s => player.queueWaveTable(audioCtx, pianoSplitterNode, _tone_0000_JCLive_sf2_file, t, root+s, dur, 0.3)); 
-    }
-    function getMidiPitch(n) { let note = n.slice(0, -1), oct = parseInt(n.slice(-1)); return notes.indexOf(note) + (oct + 1) * 12; }
     
+    function goHome() {
+        document.getElementById('resultModal').style.display = 'none';
+        document.getElementById('controlsArea').classList.remove('immersive-hidden');
+        document.getElementById('playBtn').innerText = "START";
+        document.getElementById('playBtn').classList.remove('stop');
+        hp = 100; score = 0; combo = 0;
+        updateUI(true);
+    }
+    
+    // SCORING FIX: Weighted Total (Good = 0.5)
     function showResult() {
         document.getElementById('resultModal').style.display = 'flex';
         let total = stats.perfect + stats.good + stats.miss;
-        if(total===0) total=1;
+        if(total === 0) total = 1;
+        
         document.getElementById('resPerfect').innerText = stats.perfect;
         document.getElementById('resGood').innerText = stats.good;
         document.getElementById('resMiss').innerText = stats.miss;
         document.getElementById('resCombo').innerText = maxCombo;
-        let pRate = stats.perfect / total;
+        
+        // New Formula: (Perfect*1 + Good*0.5) / Total
+        let weightedScore = (stats.perfect * 1.0 + stats.good * 0.5) / total;
+        
         let rank = "F";
-        if(pRate > 0.95 && stats.miss===0) rank = "S"; else if(pRate > 0.8) rank = "A"; else if(pRate > 0.6) rank = "B"; else if(pRate > 0.4) rank = "C";
-        let rEl = document.getElementById('finalRank'); rEl.innerText = rank; rEl.className = "rank-big rank-" + rank;
+        if(weightedScore >= 0.95) rank = "S";
+        else if(weightedScore >= 0.8) rank = "A";
+        else if(weightedScore >= 0.6) rank = "B";
+        else if(weightedScore >= 0.4) rank = "C";
+        
+        let rEl = document.getElementById('finalRank');
+        rEl.innerText = rank;
+        rEl.className = "rank-big rank-" + rank;
     }
-    function closeResult() { document.getElementById('resultModal').style.display = 'none'; }
 
 </script>
 """
@@ -716,7 +861,6 @@ try:
         f.write(JS_PART)
         f.write('\n</body>\n</html>')
     print(f"✅ 成功！檔案已建立: {FILENAME}")
-    print("📂 目前目錄檔案列表:", os.listdir("."))
 except Exception as e:
     print(f"❌ 寫入檔案失敗: {e}")
     exit(1)
