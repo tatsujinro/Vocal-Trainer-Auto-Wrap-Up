@@ -3,18 +3,17 @@ import os
 import ssl
 
 # ==========================================
-# 版本更新: v30.0 (Arcade Edition)
-# 核心變更:
-# 1. 遊戲化介面: HP 血條, Combo 系統, 結算評價
-# 2. 動態運鏡: Smooth Follow Camera
-# 3. 視覺特效: 音符填充 (Note Filling), 粒子打擊感
-# 4. 判定機制: 基於「音符完成度」的計分系統
-# 5. 引擎: v29.8.1 (Smart Magnet + Descending Fix)
+# 版本更新: v30.2 (Stable Arcade)
+# 修正項目:
+# 1. 補回 P4 (四度) 與 P5 (五度) 練習模式
+# 2. 修復 generateTargets 寫死三和弦的邏輯錯誤
+# 3. 修復動態鏡頭因「除以零」導致畫面 NaN (音符消失) 的 Bug
+# 4. 包含 v30.1 的所有修正 (預備拍、BPM、死掉動畫)
 # ==========================================
-VERSION = "v30_0_Arcade"
+VERSION = "v30_2_Stable"
 FILENAME = f"VocalTrainer_Offline_{VERSION}.html"
 
-print(f"🚀 正在開始打包 {VERSION} (街機遊戲版)...")
+print(f"🚀 正在開始打包 {VERSION} (穩定街機版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -46,12 +45,12 @@ except Exception as e:
 # 4. 定義內容區塊
 # ---------------------------------------------------------
 
-# Part A: CSS (Cyberpunk Arcade Style)
+# Part A: CSS
 CSS_PART = """
 <style>
     :root { 
         --bg-color: #050510; 
-        --ui-bg: rgba(20, 20, 30, 0.9); 
+        --ui-bg: rgba(20, 20, 30, 0.95); 
         --text-main: #e0e0e0; 
         --accent: #00e5ff; /* Cyan */
         --accent-2: #ff00ff; /* Magenta */
@@ -61,28 +60,24 @@ CSS_PART = """
     }
     body { font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
     
-    #gameStage { position: relative; width: 100vw; height: 50vh; background: #080818; border-bottom: 2px solid #333; overflow: hidden; }
+    #gameStage { position: relative; width: 100vw; height: 50vh; background: #080818; border-bottom: 2px solid #333; overflow: hidden; transition: filter 0.5s; }
     canvas { display: block; width: 100%; height: 100%; }
     
-    /* HUD Layer */
     .hud-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
     
     /* HP Bar */
     .hp-container { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 60%; height: 15px; background: #333; border: 2px solid #555; border-radius: 10px; overflow: hidden; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
-    .hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff5252, #ffea00, #00e676); transition: width 0.2s; }
+    .hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff5252, #ffea00, #00e676); transition: width 0.2s linear; }
     .hp-text { position: absolute; top: 12px; right: 22%; color: #fff; font-size: 0.8rem; font-weight: bold; text-shadow: 1px 1px 2px black; }
 
-    /* Combo Counter (Centered) */
     .combo-container { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); text-align: center; opacity: 0; transition: opacity 0.2s, transform 0.1s; }
     .combo-num { font-size: 5rem; font-weight: 900; color: rgba(255,255,255,0.1); -webkit-text-stroke: 2px var(--accent); text-shadow: 0 0 20px var(--accent); font-family: 'Impact', sans-serif; }
     .combo-label { font-size: 1.5rem; color: var(--accent); letter-spacing: 5px; font-weight: bold; }
     .combo-active { opacity: 0.8; transform: translate(-50%, -50%) scale(1.1); }
 
-    /* Score & Version */
     .hud-score { position: absolute; top: 10px; right: 15px; font-size: 1.2rem; font-family: monospace; color: var(--accent); }
     .version-tag { position: absolute; bottom: 5px; right: 5px; font-size: 0.7rem; color: #555; }
 
-    /* Controls */
     #controlsArea { height: 50vh; overflow-y: auto; padding: 15px; box-sizing: border-box; background: var(--bg-color); transition: opacity 0.5s; padding-bottom: 80px; }
     #controlsArea.immersive-hidden { opacity: 0.1; pointer-events: none; }
     
@@ -92,15 +87,13 @@ CSS_PART = """
     .play-btn:active { transform: translateX(-50%) scale(0.95); }
     .play-btn.stop { background: #ff5252; box-shadow: 0 0 15px rgba(255, 82, 82, 0.6); }
 
-    /* Common UI Elements (Tabs, Sliders - simplified) */
-    .tabs { display: flex; gap: 5px; margin-bottom: 10px; }
-    .tab-btn { flex: 1; padding: 8px; background: #222; border: 1px solid #444; color: #888; border-radius: 5px; cursor: pointer; }
+    .tabs { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
+    .tab-btn { flex: 1 1 30%; padding: 8px; background: #222; border: 1px solid #444; color: #888; border-radius: 5px; cursor: pointer; font-size: 0.8rem; }
     .tab-btn.active { background: #333; color: var(--accent); border-color: var(--accent); }
     input[type=range] { width: 100%; accent-color: var(--accent); }
     select { background: #222; color: #fff; border: 1px solid #444; padding: 5px; width: 100%; }
     .add-btn { width: 100%; padding: 10px; background: #333; color: white; border: 1px solid #555; border-radius: 8px; cursor: pointer; }
     
-    /* Result Modal */
     #resultModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 200; display: none; flex-direction: column; justify-content: center; align-items: center; }
     .rank-big { font-size: 6rem; font-weight: 900; margin-bottom: 10px; text-shadow: 0 0 30px white; }
     .rank-S { color: var(--accent-2); text-shadow: 0 0 30px var(--accent-2); }
@@ -110,15 +103,17 @@ CSS_PART = """
     .rank-F { color: var(--miss); }
     
     .loading-mask { position: fixed; top:0; left:0; width:100%; height:100%; background: #000; z-index: 999; display: flex; justify-content: center; align-items: center; color: var(--accent); flex-direction: column; }
+    
+    .stage-dead { filter: grayscale(100%) brightness(0.5) blur(2px); }
 </style>
 """
 
 # Part B: HTML Body
 HTML_PART = """
 <div id="loadingMask" class="loading-mask">
-    <div style="font-size: 3rem; margin-bottom: 20px;">🕹️</div>
-    <div>v30.0 Arcade</div>
-    <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統啟動中...</div>
+    <div style="font-size: 3rem; margin-bottom: 20px;">🛡️</div>
+    <div>v30.2 Stable</div>
+    <div style="font-size: 0.8rem; color: #888; margin-top:10px;">修復鏡頭與練習模式...</div>
 </div>
 
 <div id="gameStage">
@@ -129,34 +124,25 @@ HTML_PART = """
             <div class="hp-fill" id="hpBar"></div>
         </div>
         <div class="hp-text">HP</div>
-        
         <div class="hud-score" id="hudScore">SCORE: 0</div>
-        
         <div class="combo-container" id="comboContainer">
             <div class="combo-num" id="comboNum">0</div>
             <div class="combo-label">COMBO</div>
         </div>
-        
-        <div class="version-tag">v30.0 Arcade</div>
+        <div class="version-tag">v30.2 Stable</div>
     </div>
 </div>
 
 <div id="controlsArea">
     <h2 style="color:var(--accent); margin:0 0 10px 0;">Vocal Arcade</h2>
     
-    <div style="background:rgba(0, 229, 255, 0.1); border:1px solid var(--accent); padding:10px; border-radius:8px; margin-bottom:15px; font-size:0.85rem; color:var(--accent);">
-        <b>🎮 遊戲規則：</b><br>
-        1. <b>音符填充：</b> 唱準時，音符會被顏色填滿。<br>
-        2. <b>完成度：</b> 填滿 >85% 獲得 Perfect。<br>
-        3. <b>血條：</b> Miss 會扣血，歸零則失敗。<br>
-        4. <b>視角：</b> 鏡頭會自動跟隨音高。
-    </div>
-
     <div class="control-group">
         <div class="tabs">
             <button id="btn-triad" class="tab-btn active" onclick="switchConfigMode('triad')">大三和弦</button>
             <button id="btn-scale5" class="tab-btn" onclick="switchConfigMode('scale5')">五度音階</button>
             <button id="btn-octave" class="tab-btn" onclick="switchConfigMode('octave')">八度音程</button>
+            <button id="btn-p5" class="tab-btn" onclick="switchConfigMode('p5')">五度</button>
+            <button id="btn-p4" class="tab-btn" onclick="switchConfigMode('p4')">四度</button>
         </div>
         <div style="display:flex; gap:5px; margin-top:10px;">
             <select id="startNote"></select>
@@ -175,7 +161,7 @@ HTML_PART = """
             <li style="padding:10px; color:#666; text-align:center;">(尚未加入)</li>
         </ul>
         <div style="margin-top:10px; font-size:0.9rem;">速度 (BPM): <span id="bpmVal">100</span></div>
-        <input type="range" id="bpm" min="60" max="180" value="100">
+        <input type="range" id="bpm" min="60" max="180" value="100" oninput="document.getElementById('bpmVal').innerText = this.value">
     </div>
     
     <div class="control-group">
@@ -213,7 +199,7 @@ HTML_PART = """
 </div>
 """
 
-# Part C: JavaScript (The Game Logic)
+# Part C: JavaScript
 JS_PART = """
 <script>
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -222,63 +208,56 @@ JS_PART = """
     let pianoAnalyser, vocalAnalyser;
     let pitchFilterNode; 
     
-    // Engine Constants
     const FPS = 40;
     const ANALYSIS_INTERVAL = 1.0 / FPS;
-    
-    // Game Constants
-    const PIXELS_PER_SEC = 120; // Faster scroll for arcade feel
+    const PIXELS_PER_SEC = 120; 
     const PIXELS_PER_SEMITONE = 20;
-    const VISUAL_OFFSET_SEC = 0.15; // Visual lag compensation
-    const BLOCK_HEIGHT = 40; // Note height (approx +/- 1 semitone visually)
+    const VISUAL_OFFSET_SEC = 0.15; 
+    const BLOCK_HEIGHT = 40; 
     
-    // State
     let isPlaying = false;
     let gameLoopId;
     let lastAnalysisTime = 0;
     
-    // Game Data
-    let gameTargets = [];      // The notes to sing {midi, startTime, duration, hitFrames, totalFrames, status}
-    let userPitchHistory = []; // Trail for drawing
-    let particles = [];        // Visual effects
-    let popups = [];           // Text popups (Perfect/Good)
+    let gameTargets = [];      
+    let userPitchHistory = []; 
+    let particles = [];        
+    let popups = [];           
     
-    // Score State
     let hp = 100;
     let score = 0;
     let combo = 0;
     let maxCombo = 0;
     let stats = { perfect:0, good:0, miss:0 };
     let isGameOver = false;
+    let isDying = false;
 
-    // Camera State
-    let cameraY = 60; // Center MIDI
+    let cameraY = 60; 
     let targetCameraY = 60;
 
-    // Engine Buffers
     let pitchSmoothingBuffer = [];
     let audioBuffer = new Float32Array(2048);
     let frequencyBuffer = new Float32Array(2048);
     
-    // Routine & Config
     let routineQueue = [];
     let currentRoutineIndex = 0;
     let nextNoteTime = 0;
     let timerID;
     let scheduleAheadTime = 0.1;
-    let currentRoots = [], rootIndex = 0, patternStepIndex = 0;
     let editingMode = 'triad';
     let countInBeats = 4;
-    let wakeLock = null;
 
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    
+    // Updated Profiles with P4 and P5
     let rangeProfiles = {
         'triad':  { s:'C3', p:'C4', e:'C3' },
         'scale5': { s:'C3', p:'G3', e:'C3' },
-        'octave': { s:'C3', p:'C4', e:'C3' }
+        'octave': { s:'C3', p:'C4', e:'C3' },
+        'p5':     { s:'C3', p:'C4', e:'C3' },
+        'p4':     { s:'C3', p:'C4', e:'C3' }
     };
 
-    // Canvas
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
 
@@ -340,7 +319,6 @@ JS_PART = """
             
             pianoDelayNode = audioCtx.createDelay(1.0);
             pianoSplitterNode.connect(pianoDelayNode);
-            // Simple logic: Piano also goes to mixer? keeping it simple for now
             
             try {
                 let stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false, autoGainControl:false, noiseSuppression:false}});
@@ -349,31 +327,27 @@ JS_PART = """
                 pitchFilterNode.type = "lowpass"; pitchFilterNode.frequency.value = 1500;
                 micSource.connect(pitchFilterNode);
                 pitchFilterNode.connect(vocalAnalyser);
-                
-                let micDirect = audioCtx.createGain(); // Direct monitor?
+                let micDirect = audioCtx.createGain();
                 micSource.connect(micDirect);
-                micDirect.connect(monitorGainNode); // Monitor enabled
+                micDirect.connect(monitorGainNode);
             } catch(e) { console.log("Mic error"); }
         }
         if(audioCtx.state === 'suspended') await audioCtx.resume();
         
-        // Update gains
         let vol = document.getElementById('volMonitor').value/100;
         monitorGainNode.gain.value = vol;
         let lat = document.getElementById('latencySlider').value/1000;
         pianoDelayNode.delayTime.value = lat;
-        document.getElementById('latencyVal').innerText = document.getElementById('latencySlider').value;
     }
 
-    // --- GAME LOOP ---
     async function togglePlay() {
         if(isPlaying) { stop(); return; }
         if(routineQueue.length===0) { alert("請加入挑戰！"); return; }
         
         await initAudio();
-        isPlaying = true; isGameOver = false;
+        isPlaying = true; isGameOver = false; isDying = false;
+        document.getElementById('gameStage').classList.remove('stage-dead');
         
-        // Reset Stats
         hp = 100; score = 0; combo = 0; maxCombo = 0;
         stats = {perfect:0, good:0, miss:0};
         gameTargets = []; userPitchHistory = []; pitchSmoothingBuffer = []; particles = []; popups = [];
@@ -396,38 +370,40 @@ JS_PART = """
         document.getElementById('controlsArea').classList.remove('immersive-hidden');
         document.getElementById('playBtn').innerText = "START";
         document.getElementById('playBtn').classList.remove('stop');
-        if(!isGameOver) showResult();
+        if(!isGameOver && !isDying) showResult();
     }
 
-    // --- CORE RENDER LOOP ---
     function renderLoop() {
         if(!isPlaying) return;
         
-        // 1. Update Camera (Smooth Damping)
         let now = audioCtx.currentTime;
         let futureNotes = gameTargets.filter(t => t.startTime > now && t.startTime < now + 3.0);
+        
+        // BUG FIX: Prevent Divide by Zero (NaN Camera)
         if (futureNotes.length > 0) {
             let sum = futureNotes.reduce((a,b) => a + b.midi, 0);
             targetCameraY = sum / futureNotes.length;
+        } else {
+            // If no notes, keep camera where it is (or move to center if completely empty)
+            // targetCameraY = cameraY; 
         }
-        // Lerp camera
+        
+        // Safety check for NaN
+        if (isNaN(targetCameraY)) targetCameraY = 60;
+        
         cameraY += (targetCameraY - cameraY) * 0.05;
 
-        // 2. Clear & Draw Grid
         ctx.fillStyle = "#050510"; ctx.fillRect(0, 0, canvas.width, canvas.height);
         drawGrid(cameraY);
         
-        let playheadX = canvas.width * 0.2; // Fixed playhead
+        let playheadX = canvas.width * 0.2;
         
-        // 3. Draw Notes
         gameTargets.forEach(t => {
             let x = playheadX + (t.startTime - now) * PIXELS_PER_SEC;
             let w = t.duration * PIXELS_PER_SEC;
             let y = getYfromMidi(t.midi);
             
-            // Check visibility
             if (x + w > 0 && x < canvas.width) {
-                // Base
                 ctx.fillStyle = "rgba(0, 229, 255, 0.1)";
                 ctx.strokeStyle = "rgba(0, 229, 255, 0.5)";
                 ctx.lineWidth = 2;
@@ -435,12 +411,9 @@ JS_PART = """
                 ctx.stroke();
                 ctx.fill();
                 
-                // Filling Effect (Liquid)
                 if (t.hitFrames > 0) {
                     let fillRatio = t.hitFrames / t.totalFrames;
-                    let fillW = w * fillRatio; // Fill based on ratio, or visual progress?
-                    // Better visual: Fill from left based on time, but opacity based on hit?
-                    // Actually, let's fill the PORTION that was hit. But simple approach: progress bar style
+                    let fillW = w * fillRatio;
                     ctx.fillStyle = "rgba(0, 229, 255, 0.8)";
                     ctx.shadowBlur = 15; ctx.shadowColor = "#00e5ff";
                     ctx.fillRect(x, y - BLOCK_HEIGHT/2 + 2, Math.min(w, fillW), BLOCK_HEIGHT - 4);
@@ -448,179 +421,116 @@ JS_PART = """
                 }
             }
             
-            // Note completion check (One-time trigger)
             if (!t.processed && now > t.startTime + t.duration) {
                 t.processed = true;
                 evaluateNote(t, x + w, y);
             }
         });
 
-        // 4. Detect Pitch & Game Logic
-        detectAndProcessPitch(now, playheadX);
+        if(!isDying) detectAndProcessPitch(now, playheadX);
 
-        // 5. Draw Particles & Popups
         updateAndDrawParticles();
         updateAndDrawPopups();
-
-        // 6. Update HUD
         updateHUD();
         
-        // 7. Game Over Check
-        if(hp <= 0 && !isGameOver) {
-            isGameOver = true;
-            stop();
-            showResult();
+        if(hp <= 0 && !isGameOver && !isDying) {
+            triggerDeath();
         }
 
         gameLoopId = requestAnimationFrame(renderLoop);
     }
     
-    // --- EVALUATION LOGIC ---
+    function triggerDeath() {
+        isDying = true;
+        document.getElementById('gameStage').classList.add('stage-dead');
+        setTimeout(() => {
+            isGameOver = true;
+            stop();
+            showResult();
+        }, 800);
+    }
+    
     function evaluateNote(note, visualX, visualY) {
-        // Avoid div by zero
+        if(isDying) return; 
         let total = note.totalFrames > 0 ? note.totalFrames : 1;
         let coverage = note.hitFrames / total;
-        let grade = "";
         
         if (coverage >= 0.85) {
-            grade = "PERFECT";
-            combo++;
-            score += 100 + (combo * 10);
-            hp = Math.min(100, hp + 5);
-            stats.perfect++;
-            spawnPopup(visualX, visualY, "PERFECT", "#00e676");
-            spawnParticles(visualX, visualY, "#00e676", 10);
+            combo++; score += 100 + (combo * 10); hp = Math.min(100, hp + 5); stats.perfect++;
+            spawnPopup(visualX, visualY, "PERFECT", "#00e676"); spawnParticles(visualX, visualY, "#00e676", 10);
         } else if (coverage >= 0.50) {
-            grade = "GOOD";
-            combo++;
-            score += 50 + (combo * 5);
-            hp = Math.min(100, hp + 2);
-            stats.good++;
+            combo++; score += 50 + (combo * 5); hp = Math.min(100, hp + 2); stats.good++;
             spawnPopup(visualX, visualY, "GOOD", "#ffea00");
         } else {
-            // High/Low or Miss
-            grade = "MISS";
-            combo = 0;
-            hp = Math.max(0, hp - 15);
+            combo = 0; hp = Math.max(0, hp - 10); 
             stats.miss++;
             spawnPopup(visualX, visualY, "MISS", "#ff5252");
-            // Shake screen effect? (Maybe later)
         }
         if (combo > maxCombo) maxCombo = combo;
     }
 
-    // --- PITCH DETECTION (v29.8.1 Descending Fix) ---
     function detectAndProcessPitch(now, playheadX) {
-        if (now - lastAnalysisTime < ANALYSIS_INTERVAL) {
-            drawTrail(now, playheadX);
-            return;
-        }
+        if (now - lastAnalysisTime < ANALYSIS_INTERVAL) { drawTrail(now, playheadX); return; }
         lastAnalysisTime = now;
-        
         if (!vocalAnalyser) return;
         
-        // RMS Check
         vocalAnalyser.getFloatTimeDomainData(audioBuffer);
-        let rms = 0;
-        for(let i=0; i<audioBuffer.length; i++) rms += audioBuffer[i]*audioBuffer[i];
+        let rms = 0; for(let i=0; i<audioBuffer.length; i++) rms += audioBuffer[i]*audioBuffer[i];
         rms = Math.sqrt(rms/audioBuffer.length);
         
-        let detectedMidi = null;
-        let color = "rgba(255,255,255,0.2)";
-        let isHit = false;
+        let detectedMidi = null; let color = "rgba(255,255,255,0.2)"; let isHit = false;
 
         if (rms > 0.01) {
             let freq = detectPitchYIN(audioBuffer, audioCtx.sampleRate);
-            
-            // Smart Magnet + Descending Fix (v29.8.1)
             if (freq !== -1) {
                 let rawMidi = freqToMidi(freq);
-                
-                // Find Target
                 let currentTarget = gameTargets.find(t => now >= t.startTime && now <= t.startTime + t.duration);
                 if (currentTarget) {
-                    // Logic: Calculate diff
                     let diff = rawMidi - currentTarget.midi;
-                    
-                    // Trigger Magnet if +12/+24 semitones
                     if (Math.abs(diff - 12) < 2.0 || Math.abs(diff - 24) < 2.0) {
                         vocalAnalyser.getFloatFrequencyData(frequencyBuffer);
                         let targetFreq = midiToFreq(currentTarget.midi);
-                        
                         let peakCheck = checkPeakProminence(targetFreq, audioCtx.sampleRate, frequencyBuffer);
                         let energyHigh = getLinearEnergy(freq, audioCtx.sampleRate, frequencyBuffer);
-                        
                         let ratio = (energyHigh > 0) ? (peakCheck.energy / energyHigh) : 0;
-                        
-                        // v29.8.1 Threshold: 0.35 + Peak
-                        if (ratio > 0.35 && peakCheck.isPeak) {
-                            freq = targetFreq; // Force Correction
-                        }
+                        if (ratio > 0.35 && peakCheck.isPeak) freq = targetFreq;
                     }
                 }
                 
-                // Smoothing
                 let processedMidi = freqToMidi(freq);
                 pitchSmoothingBuffer.push(processedMidi);
                 if(pitchSmoothingBuffer.length > 3) pitchSmoothingBuffer.shift();
                 detectedMidi = pitchSmoothingBuffer.reduce((a,b)=>a+b,0) / pitchSmoothingBuffer.length;
                 
-                // --- HIT DETECTION ---
                 if (currentTarget) {
-                    // Accumulate Frames for Completion Rate
                     currentTarget.totalFrames++;
-                    
                     if (Math.abs(detectedMidi - currentTarget.midi) <= 0.5) {
-                        isHit = true;
-                        currentTarget.hitFrames++;
-                        color = "#00e676"; // Hit Color
-                        score += 1; // Tiny score drip per frame
-                        
-                        // Particles while holding
-                        if (Math.random() < 0.2) {
-                            let y = getYfromMidi(detectedMidi);
-                            spawnParticles(playheadX, y, "#00e676", 1);
-                        }
-                    } else {
-                        color = "#ff5252"; // Miss Pitch
-                    }
+                        isHit = true; currentTarget.hitFrames++; color = "#00e676"; score += 1;
+                        if (Math.random() < 0.2) spawnParticles(playheadX, getYfromMidi(detectedMidi), "#00e676", 1);
+                    } else color = "#ff5252";
                 }
-            } else {
-                pitchSmoothingBuffer = [];
-            }
+            } else pitchSmoothingBuffer = [];
         } else {
-            // Silence processing
             let currentTarget = gameTargets.find(t => now >= t.startTime && now <= t.startTime + t.duration);
             if (currentTarget) currentTarget.totalFrames++;
         }
 
         userPitchHistory.push({ time: now + VISUAL_OFFSET_SEC, midi: detectedMidi, color: color, isHit: isHit });
-        // Trim history
         while(userPitchHistory.length > 0 && userPitchHistory[0].time < now - 2.0) userPitchHistory.shift();
-        
         drawTrail(now, playheadX);
     }
 
-    // --- DRAWING HELPERS ---
     function drawGrid(camY) {
+        if(isNaN(camY)) camY = 60; // Extra safety
         let centerMidi = Math.round(camY);
         ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.font = "12px monospace";
-        
         for (let m = centerMidi - 12; m <= centerMidi + 12; m++) {
             let y = getYfromMidi(m);
-            // Main lines (C notes) brighter
             let isC = (m % 12) === 0;
-            ctx.strokeStyle = isC ? "#444" : "#222";
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = isC ? "#444" : "#222"; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-            
-            // Labels
-            if (isC) {
-                ctx.fillStyle = "#666";
-                ctx.fillText(getNoteName(m), canvas.width - 10, y);
-            }
+            if (isC) { ctx.fillStyle = "#666"; ctx.fillText(getNoteName(m), canvas.width - 10, y); }
         }
-        // Playhead
         ctx.strokeStyle = "rgba(255,255,255,0.3)";
         ctx.beginPath(); ctx.moveTo(canvas.width * 0.2, 0); ctx.lineTo(canvas.width * 0.2, canvas.height); ctx.stroke();
     }
@@ -628,193 +538,84 @@ JS_PART = """
     function drawTrail(now, phX) {
         if(userPitchHistory.length < 2) return;
         ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round";
-        
         for(let i=1; i<userPitchHistory.length; i++) {
             let p1 = userPitchHistory[i-1]; let p2 = userPitchHistory[i];
-            if (p1.midi && p2.midi && Math.abs(p1.midi - p2.midi) < 5) { // Break huge jumps
+            if (p1.midi && p2.midi && Math.abs(p1.midi - p2.midi) < 5) {
                 let x1 = phX + (p1.time - now) * PIXELS_PER_SEC;
                 let x2 = phX + (p2.time - now) * PIXELS_PER_SEC;
-                let y1 = getYfromMidi(p1.midi);
-                let y2 = getYfromMidi(p2.midi);
-                
-                ctx.strokeStyle = p2.color;
-                // Glow effect for hit
-                if (p2.isHit) {
-                    ctx.shadowBlur = 10; ctx.shadowColor = p2.color;
-                    ctx.lineWidth = 6;
-                } else {
-                    ctx.shadowBlur = 0;
-                    ctx.lineWidth = 4;
+                let y1 = getYfromMidi(p1.midi); let y2 = getYfromMidi(p2.midi);
+                if(!isNaN(y1) && !isNaN(y2)) {
+                    ctx.strokeStyle = p2.color;
+                    if (p2.isHit) { ctx.shadowBlur = 10; ctx.shadowColor = p2.color; ctx.lineWidth = 6; } else { ctx.shadowBlur = 0; ctx.lineWidth = 4; }
+                    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.shadowBlur = 0;
                 }
-                
-                ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-                ctx.shadowBlur = 0;
             }
         }
     }
 
-    // --- PARTICLES & POPUPS ---
-    function spawnParticles(x, y, color, count) {
-        for(let i=0; i<count; i++) {
-            particles.push({
-                x: x, y: y,
-                vx: (Math.random() - 0.5) * 4,
-                vy: (Math.random() - 0.5) * 4,
-                life: 1.0, color: color
-            });
-        }
-    }
+    function spawnParticles(x, y, color, count) { for(let i=0; i<count; i++) particles.push({ x: x, y: y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 1.0, color: color }); }
     function updateAndDrawParticles() {
         for(let i=particles.length-1; i>=0; i--) {
-            let p = particles[i];
-            p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+            let p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.05;
             if(p.life <= 0) { particles.splice(i, 1); continue; }
-            
-            ctx.globalAlpha = p.life;
-            ctx.fillStyle = p.color;
-            ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
-            ctx.globalAlpha = 1.0;
+            ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
         }
     }
-    
-    function spawnPopup(x, y, text, color) {
-        popups.push({x:x, y:y, text:text, color:color, life:1.0, floatY:0});
-    }
+    function spawnPopup(x, y, text, color) { popups.push({x:x, y:y, text:text, color:color, life:1.0, floatY:0}); }
     function updateAndDrawPopups() {
         ctx.font = "bold 20px Arial"; ctx.textAlign = "center";
         for(let i=popups.length-1; i>=0; i--) {
-            let p = popups[i];
-            p.life -= 0.02; p.floatY -= 1;
+            let p = popups[i]; p.life -= 0.02; p.floatY -= 1;
             if(p.life <= 0) { popups.splice(i, 1); continue; }
-            
-            ctx.globalAlpha = p.life;
-            ctx.fillStyle = p.color;
-            ctx.shadowBlur = 5; ctx.shadowColor = "black";
-            ctx.fillText(p.text, p.x, p.y + p.floatY);
-            ctx.shadowBlur = 0;
-            ctx.globalAlpha = 1.0;
+            ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.shadowBlur = 5; ctx.shadowColor = "black"; ctx.fillText(p.text, p.x, p.y + p.floatY); ctx.shadowBlur = 0; ctx.globalAlpha = 1.0;
         }
     }
-
-    // --- HUD UPDATES ---
     function updateHUD() {
-        let hpBar = document.getElementById('hpBar');
-        hpBar.style.width = hp + "%";
-        if(hp < 30) hpBar.style.background = "#ff5252"; // Low HP Red
-        else hpBar.style.background = "linear-gradient(90deg, #ff5252, #ffea00, #00e676)";
-        
+        let hpBar = document.getElementById('hpBar'); hpBar.style.width = hp + "%";
+        if(hp < 30) hpBar.style.background = "#ff5252"; else hpBar.style.background = "linear-gradient(90deg, #ff5252, #ffea00, #00e676)";
         document.getElementById('hudScore').innerText = "SCORE: " + score;
-        
         let comboEl = document.getElementById('comboContainer');
-        if(combo > 1) {
-            document.getElementById('comboNum').innerText = combo;
-            comboEl.classList.add('combo-active');
-        } else {
-            comboEl.classList.remove('combo-active');
-        }
+        if(combo > 1) { document.getElementById('comboNum').innerText = combo; comboEl.classList.add('combo-active'); } else comboEl.classList.remove('combo-active');
     }
 
-    // --- MATH UTILS ---
     function midiToFreq(m) { return 440 * Math.pow(2, (m-69)/12); }
     function freqToMidi(f) { return 12 * (Math.log(f/440)/Math.log(2)) + 69; }
     function getYfromMidi(m) { return (canvas.height/2) - (m - cameraY) * PIXELS_PER_SEMITONE; }
     function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
     function getNoteName(m) { let n=notes[m%12]; let o=Math.floor(m/12)-1; return n+o; }
 
-    // --- AUDIO ALGORITHMS (v29.8.1 YIN/HPS/MAGNET) ---
     function detectPitchYIN(buffer, sampleRate) {
-        // ... (Same YIN impl as previous) ...
-        const threshold = 0.15; 
-        const bufferSize = buffer.length;
-        const yinBufferLength = bufferSize / 2;
-        let yinBuffer = new Float32Array(yinBufferLength);
-        const minTau = Math.floor(sampleRate / 1000);
-        const maxTau = Math.floor(sampleRate / 60);
-        if (maxTau > yinBufferLength) return -1;
-        for (let tau = 0; tau < maxTau; tau++) {
-            let sum = 0;
-            for (let i = 0; i < yinBufferLength; i++) {
-                let delta = buffer[i] - buffer[i + tau];
-                sum += delta * delta;
-            }
-            yinBuffer[tau] = sum;
-        }
-        yinBuffer[0] = 1;
-        let runningSum = 0;
-        yinBuffer[0] = 1;
-        for (let tau = 1; tau < maxTau; tau++) {
-            runningSum += yinBuffer[tau];
-            yinBuffer[tau] *= tau / runningSum;
-        }
+        const threshold = 0.15; const bufferSize = buffer.length; const yinBufferLength = bufferSize / 2; let yinBuffer = new Float32Array(yinBufferLength);
+        const minTau = Math.floor(sampleRate / 1000); const maxTau = Math.floor(sampleRate / 60); if (maxTau > yinBufferLength) return -1;
+        for (let tau = 0; tau < maxTau; tau++) { let sum = 0; for (let i = 0; i < yinBufferLength; i++) { let delta = buffer[i] - buffer[i + tau]; sum += delta * delta; } yinBuffer[tau] = sum; }
+        yinBuffer[0] = 1; let runningSum = 0; yinBuffer[0] = 1;
+        for (let tau = 1; tau < maxTau; tau++) { runningSum += yinBuffer[tau]; yinBuffer[tau] *= tau / runningSum; }
         let tauEstimate = -1;
-        for (let tau = minTau; tau < maxTau; tau++) {
-            if (yinBuffer[tau] < threshold) {
-                while (tau + 1 < maxTau && yinBuffer[tau + 1] < yinBuffer[tau]) {
-                    tau++;
-                }
-                tauEstimate = tau;
-                break;
-            }
-        }
-        if (tauEstimate === -1) {
-            let minVal = 100;
-            for (let tau = minTau; tau < maxTau; tau++) {
-                if (yinBuffer[tau] < minVal) {
-                    minVal = yinBuffer[tau];
-                    tauEstimate = tau;
-                }
-            }
-        }
+        for (let tau = minTau; tau < maxTau; tau++) { if (yinBuffer[tau] < threshold) { while (tau + 1 < maxTau && yinBuffer[tau + 1] < yinBuffer[tau]) tau++; tauEstimate = tau; break; } }
+        if (tauEstimate === -1) { let minVal = 100; for (let tau = minTau; tau < maxTau; tau++) { if (yinBuffer[tau] < minVal) { minVal = yinBuffer[tau]; tauEstimate = tau; } } }
         if (tauEstimate === -1) return -1;
         let betterTau = tauEstimate;
-        if (tauEstimate > 0 && tauEstimate < maxTau - 1) {
-            let s0 = yinBuffer[tauEstimate - 1];
-            let s1 = yinBuffer[tauEstimate];
-            let s2 = yinBuffer[tauEstimate + 1];
-            let adjustment = (s2 - s0) / (2 * (2 * s1 - s2 - s0));
-            betterTau += adjustment;
-        }
+        if (tauEstimate > 0 && tauEstimate < maxTau - 1) { let s0 = yinBuffer[tauEstimate - 1]; let s1 = yinBuffer[tauEstimate]; let s2 = yinBuffer[tauEstimate + 1]; let adjustment = (s2 - s0) / (2 * (2 * s1 - s2 - s0)); betterTau += adjustment; }
         return sampleRate / betterTau;
     }
-    
-    function getLinearEnergy(targetFreq, sampleRate, buffer) {
-        let nyquist = sampleRate / 2;
-        let index = Math.round((targetFreq / nyquist) * buffer.length);
-        if (index < 0 || index >= buffer.length) return 0;
-        let db = buffer[index];
-        return Math.pow(10, db / 20);
-    }
+    function getLinearEnergy(targetFreq, sampleRate, buffer) { let nyquist = sampleRate / 2; let index = Math.round((targetFreq / nyquist) * buffer.length); if (index < 0 || index >= buffer.length) return 0; let db = buffer[index]; return Math.pow(10, db / 20); }
+    function checkPeakProminence(targetFreq, sampleRate, buffer) { let nyquist = sampleRate / 2; let centerIdx = Math.round((targetFreq / nyquist) * buffer.length); if (centerIdx < 2 || centerIdx >= buffer.length - 2) return { energy: 0, isPeak: false }; let maxIdx = centerIdx; let maxDb = buffer[centerIdx]; if (buffer[centerIdx-1] > maxDb) { maxDb = buffer[centerIdx-1]; maxIdx = centerIdx-1; } if (buffer[centerIdx+1] > maxDb) { maxDb = buffer[centerIdx+1]; maxIdx = centerIdx+1; } let centerLinear = Math.pow(10, maxDb / 20); let leftDb = buffer[maxIdx - 2]; let rightDb = buffer[maxIdx + 2]; let leftLinear = Math.pow(10, leftDb / 20); let rightLinear = Math.pow(10, rightDb / 20); let neighborAvg = (leftLinear + rightLinear) / 2; let isProminent = centerLinear > (neighborAvg * 1.5); return { energy: centerLinear, isPeak: isProminent }; }
 
-    function checkPeakProminence(targetFreq, sampleRate, buffer) {
-        let nyquist = sampleRate / 2;
-        let centerIdx = Math.round((targetFreq / nyquist) * buffer.length);
-        if (centerIdx < 2 || centerIdx >= buffer.length - 2) return { energy: 0, isPeak: false };
-        let maxIdx = centerIdx;
-        let maxDb = buffer[centerIdx];
-        if (buffer[centerIdx-1] > maxDb) { maxDb = buffer[centerIdx-1]; maxIdx = centerIdx-1; }
-        if (buffer[centerIdx+1] > maxDb) { maxDb = buffer[centerIdx+1]; maxIdx = centerIdx+1; }
-        let centerLinear = Math.pow(10, maxDb / 20);
-        let leftDb = buffer[maxIdx - 2];
-        let rightDb = buffer[maxIdx + 2];
-        let leftLinear = Math.pow(10, leftDb / 20);
-        let rightLinear = Math.pow(10, rightDb / 20);
-        let neighborAvg = (leftLinear + rightLinear) / 2;
-        let isProminent = centerLinear > (neighborAvg * 1.5);
-        return { energy: centerLinear, isPeak: isProminent };
-    }
-
-    // --- SCHEDULING (Piano) ---
     function startRoutineItem() {
         let config = routineQueue[currentRoutineIndex];
         generateTargets(config);
         
         let now = audioCtx.currentTime;
         if (nextNoteTime < now) nextNoteTime = now + 0.5;
-        
-        // Count in
         let bpm = document.getElementById('bpm').value; 
         let beatDur = 60.0/bpm;
-        nextNoteTime += (countInBeats * beatDur); // Visual wait
+        
+        // Count-in Audio
+        let rootMidi = getMidiPitch(config.s);
+        playChord(rootMidi, nextNoteTime, beatDur * 4);
+        for(let i=0; i<4; i++) playStickClick(nextNoteTime + i*beatDur);
+        
+        nextNoteTime += (4 * beatDur);
     }
     
     function generateTargets(config) {
@@ -823,49 +624,58 @@ JS_PART = """
         let currentRoots = [];
         if (sIdx <= pIdx) for(let i=sIdx; i<=pIdx; i++) currentRoots.push(allOpts[i]);
         
-        // Generate Game Targets based on Pattern
-        // Simplified Logic: Just Scale Up for Demo
         let bpm = document.getElementById('bpm').value; 
         let beatDur = 60.0/bpm;
-        let currentTime = nextNoteTime + beatDur*4; // After countin
+        let currentTime = nextNoteTime;
         
         currentRoots.forEach(r => {
             let rootMidi = getMidiPitch(r);
-            // Pattern: Root - 3rd - 5th (Triad)
-            let intervals = [0, 4, 7, 4, 0];
+            // BUG FIX: Dynamic Intervals based on Mode
+            let intervals = [0, 4, 7, 4, 0]; // Default Triad
+            if(config.mode === 'scale5') intervals = [0, 2, 4, 5, 7, 5, 4, 2, 0];
+            else if(config.mode === 'octave') intervals = [0, 12, 0];
+            else if(config.mode === 'p5') intervals = [0, 7, 0];
+            else if(config.mode === 'p4') intervals = [0, 5, 0];
+            
             intervals.forEach((iv, i) => {
+                let noteDur = beatDur * 0.9;
                 gameTargets.push({
                     midi: rootMidi + iv,
                     startTime: currentTime + (i * beatDur),
-                    duration: beatDur * 0.9,
+                    duration: noteDur,
                     hitFrames: 0,
                     totalFrames: 0,
-                    processed: false
+                    processed: false,
+                    played: false
                 });
             });
-            currentTime += (intervals.length + 2) * beatDur; // Rest
+            currentTime += (intervals.length + 2) * beatDur;
         });
     }
     
     function scheduler() {
-        // Simple Piano Scheduler (Just plays audio, visualization is separate in gameTargets)
         while(isPlaying && nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
-            // ... (Simplified: Piano sound generation omitted for brevity in "Arcade" focus, assuming player hits notes)
-            // In a real version, we'd map gameTargets to piano events here.
-            // For now, let's just use gameTargets to drive the GAME.
             nextNoteTime += 0.1;
         }
-        if(isPlaying) timerID = setTimeout(scheduler, 100);
-        
-        // Quick Fix: Play piano corresponding to targets
+        // Audio Scheduler
         gameTargets.forEach(t => {
-            if(!t.played && audioCtx.currentTime >= t.startTime) {
+            if(!t.played && t.startTime < audioCtx.currentTime + scheduleAheadTime) {
                 t.played = true;
-                player.queueWaveTable(audioCtx, pianoSplitterNode, _tone_0000_JCLive_sf2_file, audioCtx.currentTime, t.midi, t.duration, 0.5);
+                player.queueWaveTable(audioCtx, pianoSplitterNode, _tone_0000_JCLive_sf2_file, t.startTime, t.midi, t.duration, 0.5);
             }
         });
+        if(isPlaying) timerID = setTimeout(scheduler, 50);
     }
     
+    function playStickClick(t) { 
+        let osc = audioCtx.createOscillator(); let g = audioCtx.createGain(); 
+        osc.frequency.setValueAtTime(1200, t); osc.frequency.exponentialRampToValueAtTime(800, t+0.05); 
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5, t+0.001); g.gain.exponentialRampToValueAtTime(0.001, t+0.08); 
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(t); osc.stop(t+0.1); 
+    }
+    function playChord(root, t, dur) { 
+        [0,4,7].forEach(s => player.queueWaveTable(audioCtx, pianoSplitterNode, _tone_0000_JCLive_sf2_file, t, root+s, dur, 0.3)); 
+    }
     function getMidiPitch(n) { let note = n.slice(0, -1), oct = parseInt(n.slice(-1)); return notes.indexOf(note) + (oct + 1) * 12; }
     
     function showResult() {
@@ -876,17 +686,10 @@ JS_PART = """
         document.getElementById('resGood').innerText = stats.good;
         document.getElementById('resMiss').innerText = stats.miss;
         document.getElementById('resCombo').innerText = maxCombo;
-        
         let pRate = stats.perfect / total;
         let rank = "F";
-        if(pRate > 0.95 && stats.miss===0) rank = "S";
-        else if(pRate > 0.8) rank = "A";
-        else if(pRate > 0.6) rank = "B";
-        else if(pRate > 0.4) rank = "C";
-        
-        let rEl = document.getElementById('finalRank');
-        rEl.innerText = rank;
-        rEl.className = "rank-big rank-" + rank;
+        if(pRate > 0.95 && stats.miss===0) rank = "S"; else if(pRate > 0.8) rank = "A"; else if(pRate > 0.6) rank = "B"; else if(pRate > 0.4) rank = "C";
+        let rEl = document.getElementById('finalRank'); rEl.innerText = rank; rEl.className = "rank-big rank-" + rank;
     }
     function closeResult() { document.getElementById('resultModal').style.display = 'none'; }
 
