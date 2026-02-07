@@ -3,19 +3,23 @@ import os
 import ssl
 
 # ==========================================
-# 版本更新: v33.2 (Stable Polish)
+# 版本更新: v33.2.1 (Performance Tuned)
+# 基底: v33.2
 # 
-# 整合修復:
-# 1. [Audio] scheduleAheadTime = 0.5 (修復漏音)
-# 2. [Feature] Start -> Peak -> End 完整路徑生成
-# 3. [Scoring] 動態分母計算 + Good 納入評分 (修復 Rank F)
-# 4. [Flow] Auto-End (2秒後自動結算)
-# 5. [Visual] 斷線處理 (消除心電圖垂直線)
+# 核心修復 (針對 Pattern 2 掉音):
+# 1. [Camera] 實作 Camera Latch (鏡頭鎖定)，防止過門時的畫面劇烈重繪
+# 2. [Perf] 實作 renderStartIndex/audioStartIndex，不再遍歷已結束的音符
+# 3. [Audio] 過門和弦長度縮減至 90%，避免佔用複音通道
+# 
+# 保留功能:
+# - v29.8.1 泛音抗干擾引擎
+# - v33.1 視覺斷線處理
+# - v33.2 完整路徑 & 真實評分
 # ==========================================
-VERSION = "v33_2"
+VERSION = "v33_2_1_Performance"
 FILENAME = f"VocalTrainer_Offline_{VERSION}.html"
 
-print(f"🚀 正在開始打包 {VERSION} (穩定版)...")
+print(f"🚀 正在開始打包 {VERSION} (效能優化版)...")
 
 # 1. 忽略 SSL 驗證
 ssl_context = ssl._create_unverified_context()
@@ -114,8 +118,8 @@ CSS_PART = """
 # Part B: HTML Body
 HTML_PART = """
 <div id="loadingMask" class="loading-mask">
-    <div style="font-size: 3rem; margin-bottom: 20px;">🔥</div>
-    <div>v33.2</div>
+    <div style="font-size: 3rem; margin-bottom: 20px;">⚡</div>
+    <div>v33.2.1 Performance</div>
     <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化中...</div>
 </div>
 
@@ -127,7 +131,7 @@ HTML_PART = """
         <div class="hp-text">HP</div>
         <div class="hud-score" id="hudScore">SCORE: 0</div>
         <div class="combo-container" id="comboContainer"><div class="combo-num" id="comboNum">0</div><div class="combo-label">COMBO</div></div>
-        <div class="version-tag">v33.2</div>
+        <div class="version-tag">v33.2.1 Perf</div>
     </div>
 </div>
 
@@ -212,7 +216,6 @@ JS_PART = """
     let pianoSplitterNode, monitorGainNode, mixerNode, micSource, pianoDelayNode; 
     let pianoAnalyser, vocalAnalyser, pitchFilterNode; 
     
-    // Constants
     const FPS = 40;
     const ANALYSIS_INTERVAL = 1.0 / FPS;
     const PIXELS_PER_SEC = 120; 
@@ -237,8 +240,10 @@ JS_PART = """
     let isGameOver = false;
     let isDying = false;
 
+    // Camera State
     let cameraY = 60; 
     let targetCameraY = 60;
+    let lastValidCameraY = 60; // FIX: Camera Latch
 
     let pitchSmoothingBuffer = [];
     let audioBuffer = new Float32Array(2048);
@@ -250,7 +255,10 @@ JS_PART = """
     let lastGameTime = 0;
     let timerID;
     
-    // FIX: Increased to 0.5s to prevent high-note dropout
+    // Performance Indices (Optimization)
+    let renderStartIndex = 0;
+    let audioStartIndex = 0;
+    
     let scheduleAheadTime = 0.5; 
     
     let editingMode = 'triad';
@@ -337,10 +345,7 @@ JS_PART = """
         });
     }
     
-    function clearRoutine() {
-        routineQueue = [];
-        renderRoutine();
-    }
+    function clearRoutine() { routineQueue = []; renderRoutine(); }
 
     async function initAudio() {
         if(!audioCtx) {
@@ -379,7 +384,6 @@ JS_PART = """
         try {
             await initAudio(); 
             
-            // 1. Reset Game State
             isPlaying = true; isGameOver = false; isDying = false;
             document.getElementById('gameStage').classList.remove('stage-dead');
             hp = 100; score = 0; combo = 0; maxCombo = 0;
@@ -387,19 +391,16 @@ JS_PART = """
             gameTargets = []; userPitchHistory = []; pitchSmoothingBuffer = []; particles = []; popups = [];
             currentRoutineIndex = 0;
             lastGameTime = 0;
+            renderStartIndex = 0; audioStartIndex = 0;
             
-            // 2. Camera Reset
             let startMidi = getMidiPitch(routineQueue[0].s);
-            cameraY = startMidi; 
-            targetCameraY = startMidi;
+            cameraY = startMidi; targetCameraY = startMidi; lastValidCameraY = startMidi;
             
-            // 3. UI Reset
             document.getElementById('controlsArea').classList.add('immersive-hidden');
             document.getElementById('playBtn').innerText = "STOP";
             document.getElementById('playBtn').classList.add('stop');
             updateUI(true);
             
-            // 4. Start (with buffer)
             setTimeout(() => {
                 startRoutineItem(); 
                 scheduler(); 
@@ -421,17 +422,24 @@ JS_PART = """
     }
 
     function scheduler() {
-        // Lookahead 0.5s for stability
         while(isPlaying && nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
             nextNoteTime += 0.1;
         }
-        gameTargets.forEach(t => {
+        // OPTIMIZATION: Use audioStartIndex
+        for(let i = audioStartIndex; i < gameTargets.length; i++) {
+            let t = gameTargets[i];
+            
+            // Advance index if note is long gone (keep buffer for low latency systems)
+            if (t.startTime < audioCtx.currentTime - 1.0) {
+                audioStartIndex = i;
+            }
+            
             if(!t.played && t.startTime < audioCtx.currentTime + scheduleAheadTime) {
                 t.played = true;
                 let vol = t.isBridge ? 0.7 : 0.5;
                 player.queueWaveTable(audioCtx, pianoSplitterNode, _tone_0000_JCLive_sf2_file, t.startTime, t.midi, t.duration, vol);
             }
-        });
+        }
         if(isPlaying) timerID = setTimeout(scheduler, 50);
     }
 
@@ -439,26 +447,57 @@ JS_PART = """
         if(!isPlaying) return;
         let now = audioCtx.currentTime;
         
-        let futureNotes = gameTargets.filter(t => !t.isBridge && t.startTime > now && t.startTime < now + 3.0);
-        if (futureNotes.length > 0) {
-            let sum = futureNotes.reduce((a,b) => a + b.midi, 0);
-            targetCameraY = sum / futureNotes.length;
+        // --- 1. OPTIMIZED CAMERA LOGIC (With Latch) ---
+        let futureNotes = [];
+        let count = 0;
+        let sum = 0;
+        
+        // Scan for future notes (optimized loop)
+        for(let i = renderStartIndex; i < gameTargets.length; i++) {
+            let t = gameTargets[i];
+            // Stop scanning if too far in future
+            if (t.startTime > now + 3.0) break;
+            
+            if (!t.isBridge && t.startTime > now) {
+                sum += t.midi;
+                count++;
+            }
         }
-        if (isNaN(targetCameraY)) targetCameraY = 60;
+        
+        if (count > 0) {
+            targetCameraY = sum / count;
+            lastValidCameraY = targetCameraY; // Update Latch
+        } else {
+            targetCameraY = lastValidCameraY; // HOLD POSITION (Anti-Panic)
+        }
+        
         cameraY += (targetCameraY - cameraY) * 0.05;
 
+        // --- 2. RENDER ---
         ctx.fillStyle = "#050510"; ctx.fillRect(0, 0, canvas.width, canvas.height);
         drawGrid(cameraY);
         let phX = canvas.width * 0.2;
         
-        gameTargets.forEach(t => {
-            if(t.isBridge) return;
-
+        // OPTIMIZATION: Render loop with Start Index
+        for(let i = renderStartIndex; i < gameTargets.length; i++) {
+            let t = gameTargets[i];
+            
+            // Garbage Collection for Renderer
+            if (t.startTime + t.duration < now - 2.0) {
+                renderStartIndex = i; // Advance start pointer
+                continue; 
+            }
+            
+            // Stop drawing if off-screen to the right
             let x = phX + (t.startTime - now) * PIXELS_PER_SEC;
+            if (x > canvas.width) break;
+
+            if(t.isBridge) continue;
+
             let w = t.duration * PIXELS_PER_SEC;
             let y = getYfromMidi(t.midi);
             
-            if (x + w > 0 && x < canvas.width) {
+            if (x + w > 0) {
                 ctx.fillStyle = "rgba(0, 229, 255, 0.1)";
                 ctx.strokeStyle = "rgba(0, 229, 255, 0.5)";
                 ctx.lineWidth = 2;
@@ -478,7 +517,7 @@ JS_PART = """
                 t.processed = true;
                 evaluateNote(t, x + w, y);
             }
-        });
+        }
 
         if(!isDying) detectAndProcessPitch(now, phX);
         updateAndDrawParticles();
@@ -488,7 +527,6 @@ JS_PART = """
             triggerDeath();
         }
         
-        // AUTO END LOGIC: 2s after last note
         if (!isGameOver && !isDying && lastGameTime > 0 && now > lastGameTime + 2.0) {
             stop();
         }
@@ -597,6 +635,8 @@ JS_PART = """
             let freq = detectPitchYIN(audioBuffer, audioCtx.sampleRate);
             if (freq !== -1) {
                 // v29.8.1 Logic (Restored)
+                // Use START INDEX here too? It's cheap to find so maybe not critical, 
+                // but let's keep logic simple for now as array is sorted by time.
                 let currentTarget = gameTargets.find(t => !t.isBridge && now >= t.startTime && now <= t.startTime + t.duration);
                 if (currentTarget) {
                     let targetFreq = midiToFreq(currentTarget.midi);
@@ -786,11 +826,14 @@ JS_PART = """
             
             // Bridge Logic
             if (idx < currentRoots.length - 1) {
+                // FIX: Bridge duration slightly shorter to prevent voice stealing
+                let bridgeDur = beatDur * 0.9;
+                
                 // Beat 1: Current
-                gameTargets.push({ midi: rootMidi, startTime: currentTime + patternDuration, duration: beatDur, hitFrames: 0, totalFrames: 0, processed: true, played: false, isBridge: true });
+                gameTargets.push({ midi: rootMidi, startTime: currentTime + patternDuration, duration: bridgeDur, hitFrames: 0, totalFrames: 0, processed: true, played: false, isBridge: true });
                 // Beat 2: Next
                 let nextRootMidi = getMidiPitch(currentRoots[idx+1]);
-                gameTargets.push({ midi: nextRootMidi, startTime: currentTime + patternDuration + beatDur, duration: beatDur, hitFrames: 0, totalFrames: 0, processed: true, played: false, isBridge: true });
+                gameTargets.push({ midi: nextRootMidi, startTime: currentTime + patternDuration + beatDur, duration: bridgeDur, hitFrames: 0, totalFrames: 0, processed: true, played: false, isBridge: true });
             }
 
             currentTime += (patternDuration + restDuration);
