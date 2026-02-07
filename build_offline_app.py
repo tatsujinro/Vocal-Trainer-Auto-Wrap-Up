@@ -3,7 +3,7 @@ import os
 import ssl
 
 # ==========================================
-# 版本更新: v33.2.1 (Performance Tuned)
+# 版本更新: v33.2.2 (Performance Tuned)
 # 基底: v33.2
 # 
 # 核心修復 (針對 Pattern 2 掉音):
@@ -16,7 +16,7 @@ import ssl
 # - v33.1 視覺斷線處理
 # - v33.2 完整路徑 & 真實評分
 # ==========================================
-VERSION = "v33_2_1_Performance"
+VERSION = "v33_2_2_Performance"
 FILENAME = f"VocalTrainer_Offline_{VERSION}.html"
 
 print(f"🚀 正在開始打包 {VERSION} (效能優化版)...")
@@ -119,7 +119,7 @@ CSS_PART = """
 HTML_PART = """
 <div id="loadingMask" class="loading-mask">
     <div style="font-size: 3rem; margin-bottom: 20px;">⚡</div>
-    <div>v33.2.1 Performance</div>
+    <div>v33.2.2 Performance</div>
     <div style="font-size: 0.8rem; color: #888; margin-top:10px;">系統初始化中...</div>
 </div>
 
@@ -131,7 +131,7 @@ HTML_PART = """
         <div class="hp-text">HP</div>
         <div class="hud-score" id="hudScore">SCORE: 0</div>
         <div class="combo-container" id="comboContainer"><div class="combo-num" id="comboNum">0</div><div class="combo-label">COMBO</div></div>
-        <div class="version-tag">v33.2.1 Perf</div>
+        <div class="version-tag">v33.2.2 Perf</div>
     </div>
 </div>
 
