@@ -216,6 +216,7 @@ JS_PART = """
     let pianoSplitterNode, monitorGainNode, mixerNode, micSource, pianoDelayNode; 
     let pianoAnalyser, vocalAnalyser, pitchFilterNode; 
     
+    // Constants
     const FPS = 40;
     const ANALYSIS_INTERVAL = 1.0 / FPS;
     const PIXELS_PER_SEC = 120; 
@@ -635,8 +636,6 @@ JS_PART = """
             let freq = detectPitchYIN(audioBuffer, audioCtx.sampleRate);
             if (freq !== -1) {
                 // v29.8.1 Logic (Restored)
-                // Use START INDEX here too? It's cheap to find so maybe not critical, 
-                // but let's keep logic simple for now as array is sorted by time.
                 let currentTarget = gameTargets.find(t => !t.isBridge && now >= t.startTime && now <= t.startTime + t.duration);
                 if (currentTarget) {
                     let targetFreq = midiToFreq(currentTarget.midi);
